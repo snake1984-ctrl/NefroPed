@@ -979,8 +979,7 @@ function generateReport(data) {
     function fmt(value, decimals = 2) { return !isValid(value) ? null : parseFloat(value).toFixed(decimals); }
 
     let report = [];
-    report.push("Informe de pruebas complementarias\n");
-    
+        
     // Primero recolectamos todos los bloques de analítica
     let hidrosalino = [];
     if (isValid(data.urea_mg_dl)) hidrosalino.push(`Urea: ${fmt(data.urea_mg_dl)}mg/dL`);
@@ -1097,7 +1096,7 @@ function generateReport(data) {
         report.push("\n2) Ecografía renal");
         report.push(window.ecografiaReportText);
     }
-    
+    //ESTADIFICACIÓN SEGÚN GUÍAS KDIGO 2024
     function evaluarGradoG(egfr) {
         if (!isValid(egfr)) return null;
         if (egfr >= 90) return "Estadio G1 (Normal o elevado)";
@@ -1524,8 +1523,9 @@ function generarResultadoEcografia() {
             if (medido > mediaEsperadaMm) comparador = "por encima de";
             if (medido < mediaEsperadaMm) comparador = "por debajo de";
 
-            let txtPantalla = `Riñón ${rinonUnicoTipo} (${medido} mm): ${comparador} la media esperada de hipertrofia compensadora (fórmula Krill).`;
-            let txtInforme = `-Longitud renal ecográfica: Riñón ${rinonUnicoTipo} (${medido} mm): ${comparador} la media esperada de hipertrofia compensadora (fórmula Krill).`;
+            // Modificado el formato también para el monoreno para mantener coherencia
+            let txtPantalla = `Riñón ${rinonUnicoTipo} ${medido}mm (${comparador} la media esperada de hipertrofia compensadora, fórmula Krill).`;
+            let txtInforme = `-Longitud renal ecográfica: Riñón ${rinonUnicoTipo} ${medido}mm (${comparador} la media esperada de hipertrofia compensadora, fórmula Krill).`;
             
             htmlOut += `<div style="color: var(--color-primary); font-weight: bold;">${txtPantalla}</div>`;
             window.ecografiaReportText = txtInforme; 
@@ -1541,7 +1541,7 @@ function generarResultadoEcografia() {
             
             let calcularP = (val, ladoTexto) => {
                 if (isNaN(val)) return "";
-                if (!param) return `<div style="color: var(--color-error); font-weight: bold;">Riñón ${ladoTexto} (${val}mm): Talla fuera de rango</div>`;
+                if (!param) return `<div style="color: var(--color-error); font-weight: bold;">Riñón ${ladoTexto} ${val}mm: Talla fuera de rango</div>`;
                 
                 let z = (Math.pow((val / param.M), param.L) - 1) / (param.L * param.S);
                 let p = zScoreToPercentile(z);
@@ -1551,7 +1551,8 @@ function generarResultadoEcografia() {
                 let colorStyle = isWarning ? `color: var(--color-error); font-weight: bold;` : `color: var(--color-primary); font-weight: bold;`;
                 let warningIcon = isWarning ? ` <i class="fas fa-exclamation-triangle" style="font-size:12px;"></i>` : ``;
                 
-                let textoPlano = `Riñón ${ladoTexto} (${val}mm): P${pText}`;
+                // AQUÍ ESTÁ EL CAMBIO DE FORMATO EXACTO QUE PEDÍAS
+                let textoPlano = `Riñón ${ladoTexto} ${val}mm (P${pText})`;
                 lineasReporte.push(textoPlano);
 
                 return `<div style="${colorStyle}">${textoPlano}${warningIcon}</div>`;
@@ -1559,7 +1560,7 @@ function generarResultadoEcografia() {
 
             htmlOut += calcularP(valIzq, "izquierdo");
             htmlOut += calcularP(valDer, "derecho");
-            // Se separan por punto y coma tal y como solicitaste
+            
             window.ecografiaReportText = `-Longitud renal ecográfica: ${lineasReporte.join("; ")}`; 
         }
     }
