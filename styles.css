@@ -298,8 +298,8 @@ textarea.form-control:focus {
 input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; display: none; }
 input[type=number] { -moz-appearance: textfield; appearance: textfield; }
 
-#edad_calculada { background-color: #f1f5f9 !important; color: #475569 !important; border-color: #cbd5e1 !important; cursor: not-allowed; font-weight: 500; }
-[data-color-scheme="dark"] #edad_calculada { background-color: #0f172a !important; color: #94a3b8 !important; border-color: #334155 !important; box-shadow: none; }
+#edad_calculada, .input-bloqueado { background-color: #f1f5f9 !important; color: #475569 !important; border-color: #cbd5e1 !important; cursor: not-allowed; font-weight: 500; }
+[data-color-scheme="dark"] #edad_calculada, [data-color-scheme="dark"] .input-bloqueado { background-color: #0f172a !important; color: #94a3b8 !important; border-color: #334155 !important; box-shadow: none; }
 
 .input-unit-wrapper { cursor: text; }
 
@@ -521,3 +521,22 @@ summary:focus { outline: none; }
 #empty-state-results i { font-size: 48px; color: var(--color-primary); opacity: 0.5; margin-bottom: 16px; }
 #empty-state-results h4 { margin-bottom: 8px; color: var(--color-text); }
 #empty-state-results p { font-size: 14px; max-width: 400px; margin: 0 auto; }
+
+/* Color de enlaces bibliográficos y DOI en Modo Oscuro */
+[data-color-scheme="dark"] .bibliography-details a {
+    color: #38bdf8 !important; /* Azul claro brillante y súper legible */
+    text-decoration: underline;
+}
+[data-color-scheme="dark"] .bibliography-details a:hover {
+    color: #7dd3fc !important;
+}
+/* Efecto rojizo para pestañas con campos incompletos */
+.tab-error {
+    background-color: rgba(239, 68, 68, 0.05) !important;
+    border-bottom-color: var(--color-error) !important;
+    color: var(--color-error) !important;
+    transition: all 0.3s ease;
+}
+[data-color-scheme="dark"] .tab-error {
+    background-color: rgba(239, 68, 68, 0.15) !important;
+}
