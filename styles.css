@@ -521,3 +521,12 @@ summary:focus { outline: none; }
 #empty-state-results i { font-size: 48px; color: var(--color-primary); opacity: 0.5; margin-bottom: 16px; }
 #empty-state-results h4 { margin-bottom: 8px; color: var(--color-text); }
 #empty-state-results p { font-size: 14px; max-width: 400px; margin: 0 auto; }
+
+/* Color de enlaces bibliográficos y DOI en Modo Oscuro */
+[data-color-scheme="dark"] .bibliography-details a {
+    color: #38bdf8 !important; /* Azul claro brillante y súper legible */
+    text-decoration: underline;
+}
+[data-color-scheme="dark"] .bibliography-details a:hover {
+    color: #7dd3fc !important;
+}

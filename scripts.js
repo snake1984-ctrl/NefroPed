@@ -492,25 +492,33 @@ function loadSampleData() {
         ph_plasma: 7.38, pco2_mmhg: 42.1, hco3_mmol_l: 22.8, exceso_bases_mmol_l: -1.2,
         densidad: 1018, ph_orina: 6.2, sedimento_urinario: "Hematíes 3-5/campo. Leucocitos aislados. Ausencia de cilindros.", au_orina_mg_dl: 45.8, na_orina_meq_l: 85.2, k_orina_meq_l: 55.1, cl_orina_meq_l: 98.5, osmolalidad_orina_mosm_kg: 320, ca_orina_mg_dl: 12.5, fosforo_orina_mg_dl: 18.2, magnesio_orina_mg_dl: 8.5, albumina_orina_mg_dl: 3.2, creatinina_orina_mg_dl: 68.5, proteinas_orina_mg_dl: 8.1, citrato_orina_mg_dl: 85.2, oxalato_orina_mg_dl: 15.8,
         au_24h_mg: 420, ca_24h_mg: 85, p_24h_mg: 520, mg_24h_mg: 65, albumina_24h_mg: 25, proteinas_24h_mg: 95, citrato_24h_mg: 485, oxalato_24h_mg: 28,
-        hb_g_l: 125, ferritina_ng_ml: 45.8, ist_percent: 22.5
+        hb_g_l: 125, ferritina_ng_ml: 45.8, ist_percent: 22.5,
+        rinon_izquierdo_mm: 98, rinon_derecho_mm: 95 // Datos eco
     };
     
-   Object.keys(sampleData).forEach(key => {
+    // Desmarcar monoreno al cargar los datos de test
+    const checkMonoreno = document.getElementById('check_monoreno');
+    if (checkMonoreno) {
+        checkMonoreno.checked = false;
+        toggleMonoreno(false);
+    }
+    
+    Object.keys(sampleData).forEach(key => {
         const input = document.getElementById(key);
-        if (input) {
-            input.value = sampleData[key];
-            input.dispatchEvent(new Event('input')); 
+        if (input) { 
+            input.value = sampleData[key]; 
+            input.classList.add('campo-valido'); 
         }
     });
-    calcularEdad(); updateFieldCounter(); actualizarMarcadoresEnTiempoReal();
-    Swal.fire({ 
-        icon: 'success', 
-        title: 'Datos cargados', 
-        text: 'Se han rellenado los campos de ejemplo de forma automática.',
-        showConfirmButton: true,
-        confirmButtonText: '<i class="fas fa-check"></i> OK',
-        confirmButtonColor: '#21808d',
-        allowOutsideClick: true 
+    
+    document.getElementById('fecha_nacimiento').dispatchEvent(new Event('input'));
+    updateFieldCounter();
+    actualizarMarcadoresEnTiempoReal();
+    
+    Swal.fire({
+        icon: 'success', title: 'Datos cargados',
+        text: 'Se han cargado datos ficticios de prueba para todas las fórmulas.',
+        timer: 1500, showConfirmButton: false
     });
 }
 
@@ -525,25 +533,30 @@ function validarTodosCampos() {
     
     fieldIds.forEach(campoId => {
         const campo = document.getElementById(campoId);
-        if (!campo || !campo.value || campo.value.trim() === '') { camposVacios.push(campoId); marcarError(campoId, true); } 
-        else { marcarError(campoId, false); }
+        // Si el campo está deshabilitado (ej. riñón ausente), lo ignoramos
+        if (campo && campo.disabled) {
+            marcarError(campoId, false);
+        } else if (!campo || !campo.value || campo.value.trim() === '') { 
+            camposVacios.push(campoId); 
+            marcarError(campoId, true); 
+        } else { 
+            marcarError(campoId, false); 
+        }
     });
     
     actualizarMarcadoresEnTiempoReal();
     
     if (camposVacios.length > 0) {
         const listaCampos = camposVacios.map(id => {
-            const label = document.querySelector(`label[for='${id}']`);
-            return label ? label.textContent.replace(' *', '') : id.replace(/_/g, ' ');
-        });
-        const primerCampoVacio = document.getElementById(camposVacios[0]);
-        if (primerCampoVacio) primerCampoVacio.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            const label = document.querySelector(`label[for="${id}"]`);
+            return label ? label.textContent : id;
+        }).join(', ');
         
         Swal.fire({
             icon: 'warning', title: 'Campos incompletos',
-            html: `<p>Faltan <strong>${camposVacios.length}</strong> campos:</p><div style="max-height: 250px; overflow-y: auto; text-align: left; margin: 15px 0; padding: 10px; background-color: #f8f9fa; border-radius: 5px;"><ul style="margin: 0; padding-left: 20px;">${listaCampos.map(c => `<li style="margin-bottom: 5px;">${c}</li>`).join('')}</ul></div><p style="margin-top: 15px;"><strong>¿Deseas continuar?</strong></p>`,
-            showCancelButton: true, confirmButtonText: 'Sí, continuar', cancelButtonText: 'Rellenar primero', confirmButtonColor: '#28a745', cancelButtonColor: '#6c757d', reverseButtons: true
-        }).then(result => { if (result.isConfirmed) executeCalculations(); });
+            text: `Por favor, rellene los siguientes campos: ${listaCampos}`,
+            confirmButtonColor: '#0891b2'
+        });
         return false;
     }
     return true;
@@ -823,19 +836,33 @@ function displayResults() {
     
     const resultLabels = {
         superficiecorporal: 'Superficie Corporal (m²)', imc: 'IMC (kg/m²)', vpercent: 'V% (creat enz/orina)', 
-        schwartz_neo: 'eGFR Schwartz neonatal (ml/min/1.73m²)', schwartz_lact: 'eGFR Schwartz lactante (ml/min/1.73m²)',
-        schwartz_bedside: 'eGFR Schwartz Bedside (ml/min/1.73m²)', bokenkamp: 'eGFR Bökenkamp (ml/min/1.73m²)',
-        ekfc_cr: 'eGFR EKFC Cr (ml/min/1.73m²)', ekfc_cistc: 'eGFR EKFCCC CistC (ml/min/1.73m²)',
-        ckid_u25_cr: 'eGFR CKiD U25 Cr (ml/min/1.73m²)', ckid_u25_cistc: 'eGFR CKiD U25 CistC (ml/min/1.73m²)', ckid_u25_combinado: 'eGFR Combinado (ml/min/1.73m²)', 
+        schwartz_neo: 'eGFR Schwartz neonatal', schwartz_lact: 'eGFR Schwartz lactante',
+        schwartz_bedside: 'eGFR Schwartz Bedside', bokenkamp: 'eGFR Bökenkamp',
+        ekfc_cr: 'eGFR EKFC Cr', ekfc_cistc: 'eGFR EKFC CistC',
+        ckid_u25_cr: 'eGFR CKiD U25 Cr', ckid_u25_cistc: 'eGFR CKiD U25 CistC', ckid_u25_combinado: 'eGFR Combinado', 
         efna: 'EF Na (%)', efk: 'EF K (%)', efcl: 'EF Cl (%)', efau: 'EF AU (%)', cacr: 'Ca/Cr (mg/mg)', mgcr: 'Mg/Cr (mg/mg)', pcr: 'P/Cr (mg/mg)', aucr: 'AU/Cr (mg/mg)', albcr: 'Alb/Cr (mg/g)', protcr: 'Prot/Cr (mg/g)', citratocr: 'Citrato/Cr (mg/mg)', oxalatocr: 'Oxalato/Cr (mg/mg)', nak: 'Na/K orina', cacitrato: 'Ca/Citrato', rtp: 'RTP (%)', uricosuria: 'Uricosuria (mg/1.73m²/día)', calciuria: 'Calciuria (mg/kg/día)', citraturia: 'Citraturia (mg/kg/día)', fosfaturia: 'Fosfaturia (mg/kg/día)', magnesuria: 'Magnesuria (mg/kg/día)', oxaluria: 'Oxaluria (mg/1.73m²/día)', albuminuria: 'Albuminuria (mg/1.73m²/día)', proteinuria: 'Proteinuria (mg/m²/día)', proteinuriaestimada: 'Proteinuria estimada (mg/m²/día)'
     };
+
+    // Estructura de categorías (Idéntica al Informe)
+    const categorias = [
+        { titulo: "Datos Generales", keys: ['superficiecorporal', 'imc'] },
+        { titulo: "Filtrado Glomerular (eGFR)", keys: ['vpercent', 'schwartz_neo', 'schwartz_lact', 'schwartz_bedside', 'bokenkamp', 'ckid_u25_cr', 'ekfc_cr', 'ckid_u25_cistc', 'ekfc_cistc', 'ckid_u25_combinado'] },
+        { titulo: "Excreción Fraccional", keys: ['efna', 'efk', 'efcl', 'efau'] },
+        { titulo: "Índices Urinarios (Orina Puntual)", keys: ['cacr', 'mgcr', 'pcr', 'aucr', 'albcr', 'protcr', 'citratocr', 'oxalatocr', 'nak', 'cacitrato', 'rtp'] },
+        { titulo: "Excreción en 24h", keys: ['uricosuria', 'calciuria', 'citraturia', 'fosfaturia', 'magnesuria', 'oxaluria', 'albuminuria', 'proteinuria', 'proteinuriaestimada'] }
+    ];
     
     const resultsGrid = document.getElementById('resultsGrid');
     resultsGrid.innerHTML = '';
+    resultsGrid.className = ''; // Quitamos el grid global para aplicar grids por categoría
     resultsGrid.classList.remove('hidden');
+    
     const emptyState = document.getElementById('empty-state-results');
     if(emptyState) emptyState.classList.add('hidden');
  
+    window.valoresFueraRango = []; 
+
+    // 1. Validar y registrar valores fuera de rango para la alerta roja global
     parametros.forEach(param => {
         const valor = results[param.key];
         if (valor && valor !== 0) {
@@ -847,35 +874,63 @@ function displayResults() {
         }
     });
     
-    Object.keys(results).forEach(key => {
-        if (resultLabels[key]) {
-            const numValue = results[key];
-            if (numValue && numValue !== 0) {
-                const resultItem = document.createElement('div');
-                resultItem.className = 'result-item'; resultItem.id = `resultado-${key}`;
+    // 2. Generar HTML por categorías
+    let htmlFinal = "";
+
+    categorias.forEach(cat => {
+        let itemsHTML = "";
+        cat.keys.forEach(key => {
+            const valor = results[key];
+            if (valor && valor !== 0) {
+                const label = resultLabels[key];
+                const numValue = typeof valor === 'number' ? valor.toFixed(2) : '0.00';
                 
-                const label = document.createElement('div');
-                label.className = 'result-label'; label.textContent = resultLabels[key];
-                
-                const value = document.createElement('div');
-                value.className = 'result-value';
-                value.textContent = typeof numValue === 'number' ? numValue.toFixed(2) : '0.00';
-                
-                if (key === "superficiecorporal" || key === "imc") {
-                    value.style.setProperty('color', 'var(--color-primary)', 'important'); 
-                    value.style.fontWeight = "bold";
-                } else {
-                    const paramEncontrado = parametros.find(p => p.key === key);
-                    if (paramEncontrado) {
-                        const evaluacion = evaluarRango(key, numValue, edad, edadMeses);
-                        value.style.setProperty('color', !evaluacion.enRango ? '#dc2626' : 'var(--color-primary)', 'important');
-                        value.style.fontWeight = "bold";
+                let colorStyle = 'color: var(--color-primary) !important; font-weight: bold;';
+                if (key !== "superficiecorporal" && key !== "imc") {
+                    const evaluacion = evaluarRango(key, valor, edad, edadMeses);
+                    if (!evaluacion.enRango) {
+                        colorStyle = 'color: #dc2626 !important; font-weight: bold;';
                     }
                 }
-                resultItem.appendChild(label); resultItem.appendChild(value); resultsGrid.appendChild(resultItem);
+                
+                itemsHTML += `
+                    <div class="result-item" id="resultado-${key}">
+                        <div class="result-label">${label}</div>
+                        <div class="result-value" style="${colorStyle}">${numValue}</div>
+                    </div>`;
             }
+        });
+        
+        if (itemsHTML !== "") {
+            htmlFinal += `
+                <div style="margin-top: 24px;">
+                    <h4 style="margin-bottom: 12px; color: var(--color-primary); border-bottom: 2px solid var(--color-bg-1); padding-bottom: 6px; font-size: 15px; font-weight: 600;">
+                        ${cat.titulo}
+                    </h4>
+                    <div class="results-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 16px;">
+                        ${itemsHTML}
+                    </div>
+                </div>
+            `;
         }
     });
+
+    // 3. Añadir la Ecografía al final
+    let tarjetaEcografia = generarResultadoEcografia();
+    if (tarjetaEcografia !== "") {
+        htmlFinal += `
+            <div style="margin-top: 24px;">
+                <h4 style="margin-bottom: 12px; color: var(--color-primary); border-bottom: 2px solid var(--color-bg-1); padding-bottom: 6px; font-size: 15px; font-weight: 600;">
+                    Ecografía Renal
+                </h4>
+                <div class="results-grid" style="display: grid; grid-template-columns: 1fr; gap: 16px;">
+                    ${tarjetaEcografia}
+                </div>
+            </div>
+        `;
+    }
+
+    resultsGrid.innerHTML = htmlFinal;
     document.getElementById('results').classList.remove('hidden');
 }
 
@@ -887,6 +942,10 @@ function generateReport(data) {
     function fmt(value, decimals = 2) { return !isValid(value) ? null : parseFloat(value).toFixed(decimals); }
 
     let report = [];
+    
+    // Título Principal
+    report.push("Informe de pruebas complementarias\n");
+    report.push("1) Analítica:");
     
     let hidrosalino = [];
     if (isValid(data.urea_mg_dl)) hidrosalino.push(`Urea: ${fmt(data.urea_mg_dl)}mg/dL`);
@@ -988,6 +1047,17 @@ function generateReport(data) {
     if (isValid(results.proteinuria)) orina24h.push(`Proteinuria: ${fmt(results.proteinuria)}mg/m²/día`);
     if (isValid(results.albuminuria)) orina24h.push(`Albuminuria: ${fmt(results.albuminuria)}mg/1.73m²/día`);
     if (orina24h.length > 0) report.push(`- Orina de 24h: ${orina24h.join('   ')}`);
+
+    const comentarioNutricional = document.getElementById('comentario_nutricional') ? document.getElementById('comentario_nutricional').value.trim() : '';
+    if (comentarioNutricional) {
+        report.push(`- Nutricional: ${comentarioNutricional}`);
+    }
+
+    // INYECTAR LA ECOGRAFÍA EN EL INFORME (En su propia sección)
+    if (window.ecografiaReportText) {
+        report.push("\n2) Ecografía renal");
+        report.push(window.ecografiaReportText);
+    }
     
     // --- ESTADIFICACIÓN KDIGO Y LACTANTES ---
     function evaluarGradoG(egfr) {
@@ -1045,8 +1115,7 @@ function generateReport(data) {
         if (gradoAlb) grados_kdigo.push(`- Albuminuria: ${gradoAlb}`);
 
         if (grados_kdigo.length > 0) {
-            report.push('');
-            report.push('ESTADIFICACIÓN SEGÚN GUÍAS KDIGO 2012');
+            report.push('\n\nESTADIFICACIÓN SEGÚN GUÍAS KDIGO 2012\n');
             report = report.concat(grados_kdigo); 
         }
     } else {
@@ -1066,23 +1135,17 @@ function generateReport(data) {
         if (isValid(results.ckid_u25_combinado)) grados_lactante.push(`- eGFR Combinado (CKiD U25): ${evaluarERC_Lactante(results.ckid_u25_combinado, mesesTotales)}`);
 
         if (grados_lactante.length > 0) {
-            report.push('');
-            report.push('ESTADIFICACIÓN ERC (AJUSTADA A EDAD < 2 AÑOS)');
+            report.push('\n\nESTADIFICACIÓN ERC (AJUSTADA A EDAD < 2 AÑOS)\n');
             report = report.concat(grados_lactante);
         }
     }
     // -----------------------------------------------------
-
-    const comentarioNutricional = document.getElementById('comentario_nutricional') ? document.getElementById('comentario_nutricional').value.trim() : '';
-    if (comentarioNutricional) {
-        report.push('');
-        report.push(`Nutricional: ${comentarioNutricional}`);
-    }
     
     if (window.valoresFueraRango && window.valoresFueraRango.length > 0) {
-        report.push('');
-        report.push('Valores fuera de rango:');
-        window.valoresFueraRango.forEach(v => report.push(v));
+        report.push('\n\nVALORES FUERA DE RANGO\n');
+        // Aseguramos que empiecen por guión y borramos el "por" en "por encima/debajo" para ajustar el formato
+        let fueraRangoEditado = window.valoresFueraRango.map(v => `-${v}`);
+        fueraRangoEditado.forEach(v => report.push(v));
     }
 
     const reportTextReady = report.join('\n');
@@ -1350,4 +1413,122 @@ function reactivarCaja(id) {
     if (!input) return;
     input.disabled = false;
     input.classList.remove('input-bloqueado'); // Le quitamos el diseño de bloqueo
+}// ==========================================
+// MOTOR MATEMÁTICO: ECOGRAFÍA RENAL (OBRYCKI & KRILL)
+// ==========================================
+
+const obryckiLMS = [
+    { min: 0, max: 54.9, L: 0.567, M: 50.4, S: 0.0844 },
+    { min: 55, max: 59.9, L: 0.532, M: 52.9, S: 0.0836 },
+    { min: 60, max: 64.9, L: 0.498, M: 55.4, S: 0.0828 },
+    { min: 65, max: 69.9, L: 0.458, M: 58.3, S: 0.0820 },
+    { min: 70, max: 74.9, L: 0.423, M: 60.8, S: 0.0812 },
+    { min: 75, max: 79.9, L: 0.387, M: 63.3, S: 0.0804 },
+    { min: 80, max: 84.9, L: 0.352, M: 65.7, S: 0.0797 },
+    { min: 85, max: 89.9, L: 0.312, M: 68.3, S: 0.0788 },
+    { min: 90, max: 94.9, L: 0.276, M: 70.6, S: 0.0781 },
+    { min: 95, max: 99.9, L: 0.237, M: 73.0, S: 0.0773 },
+    { min: 100, max: 104.9, L: 0.200, M: 75.2, S: 0.0765 },
+    { min: 105, max: 109.9, L: 0.165, M: 77.2, S: 0.0758 },
+    { min: 110, max: 114.9, L: 0.131, M: 79.1, S: 0.0751 },
+    { min: 115, max: 119.9, L: 0.090, M: 81.4, S: 0.0743 },
+    { min: 120, max: 124.9, L: 0.052, M: 83.5, S: 0.0735 },
+    { min: 125, max: 129.9, L: 0.015, M: 85.6, S: 0.0728 },
+    { min: 130, max: 134.9, L: -0.022, M: 87.8, S: 0.0721 },
+    { min: 135, max: 139.9, L: -0.058, M: 89.9, S: 0.0714 },
+    { min: 140, max: 144.9, L: -0.093, M: 92.1, S: 0.0707 },
+    { min: 145, max: 149.9, L: -0.131, M: 94.5, S: 0.0700 },
+    { min: 150, max: 154.9, L: -0.168, M: 97.0, S: 0.0693 },
+    { min: 155, max: 159.9, L: -0.207, M: 99.6, S: 0.0686 },
+    { min: 160, max: 164.9, L: -0.243, M: 102.1, S: 0.0680 },
+    { min: 165, max: 169.9, L: -0.279, M: 104.5, S: 0.0673 },
+    { min: 170, max: 174.9, L: -0.315, M: 106.9, S: 0.0667 },
+    { min: 175, max: 179.9, L: -0.353, M: 109.5, S: 0.0660 },
+    { min: 180, max: 184.9, L: -0.389, M: 111.9, S: 0.0654 },
+    { min: 185, max: 189.9, L: -0.427, M: 114.5, S: 0.0647 },
+    { min: 190, max: 194.9, L: -0.461, M: 116.8, S: 0.0641 },
+    { min: 195, max: 199.9, L: -0.486, M: 118.5, S: 0.0637 },
+    { min: 200, max: 300.0, L: -0.538, M: 122.0, S: 0.0628 }
+];
+
+function zScoreToPercentile(z) {
+    if (z === 0.0) return 50;
+    let b1 = 0.31938153, b2 = -0.356563782, b3 = 1.781477937, b4 = -1.821255978, b5 = 1.330274429;
+    let p = 0.2316419, c = 0.39894228;
+    let t = 1.0 / (1.0 + p * Math.abs(z));
+    let cdf = 1.0 - c * Math.exp(-z * z / 2.0) * t * (t *(t *(t *(t * b5 + b4) + b3) + b2) + b1);
+    if (z < 0) cdf = 1.0 - cdf;
+    return Math.round(cdf * 100);
+}
+
+function generarResultadoEcografia() {
+    let checkMonoreno = document.getElementById('check_monoreno');
+    let isMonoreno = checkMonoreno ? checkMonoreno.checked : false;
+    let valIzq = parseFloat(document.getElementById('rinon_izquierdo_mm').value);
+    let valDer = parseFloat(document.getElementById('rinon_derecho_mm').value);
+    let talla = parseFloat(document.getElementById('talla_cm').value);
+    
+    window.ecografiaReportText = ""; 
+
+    if (isNaN(valIzq) && isNaN(valDer)) return "";
+
+    let htmlOut = `<div class="result-item" style="grid-column: 1 / -1;">
+        <span class="result-label"><i class="fas fa-wave-square"></i> Longitud renal ecográfica</span>
+        <span class="result-value" style="font-size: 15px; font-weight: 500; line-height: 1.5; display: block; margin-top: 8px;">`;
+
+    if (isMonoreno) {
+        let radioUnico = document.querySelector('input[name="radio_rinon_unico"]:checked');
+        let rinonUnicoTipo = radioUnico ? radioUnico.value : 'izquierdo';
+        let medido = (rinonUnicoTipo === 'izquierdo') ? valIzq : valDer;
+        let edadDec = window.edadEnAños; 
+        
+        if (!isNaN(medido) && typeof edadDec === 'number') {
+            let mediaEsperadaMm = Math.round(((0.4 * edadDec) + 7) * 10);
+            
+            let comparador = "igual a";
+            if (medido > mediaEsperadaMm) comparador = "por encima de";
+            if (medido < mediaEsperadaMm) comparador = "por debajo de";
+
+            let txtPantalla = `Riñón ${rinonUnicoTipo} (${medido} mm): ${comparador} la media esperada de hipertrofia compensadora (fórmula Krill).`;
+            let txtInforme = `-Longitud renal ecográfica: Riñón ${rinonUnicoTipo} (${medido} mm): ${comparador} la media esperada de hipertrofia compensadora (fórmula Krill).`;
+            
+            htmlOut += `<div style="color: var(--color-primary); font-weight: bold;">${txtPantalla}</div>`;
+            window.ecografiaReportText = txtInforme; 
+        } else {
+            htmlOut += `<span style="color: var(--color-text-secondary); font-size: 13px;">Introduzca la fecha de nacimiento y la medida del riñón para calcular.</span>`;
+        }
+    } else {
+        if (isNaN(talla)) {
+            htmlOut += `<span style="color: var(--color-text-secondary); font-size: 13px;">Se requiere la Talla del paciente para calcular los percentiles.</span>`;
+        } else {
+            let param = obryckiLMS.find(r => talla >= r.min && talla <= r.max);
+            let lineasReporte = [];
+            
+            let calcularP = (val, ladoTexto) => {
+                if (isNaN(val)) return "";
+                if (!param) return `<div style="color: var(--color-error); font-weight: bold;">Riñón ${ladoTexto} (${val}mm): Talla fuera de rango</div>`;
+                
+                let z = (Math.pow((val / param.M), param.L) - 1) / (param.L * param.S);
+                let p = zScoreToPercentile(z);
+                
+                let pText = (p < 1) ? "<1" : (p > 99) ? ">99" : p;
+                let isWarning = (p < 3 || p > 97);
+                let colorStyle = isWarning ? `color: var(--color-error); font-weight: bold;` : `color: var(--color-primary); font-weight: bold;`;
+                let warningIcon = isWarning ? ` <i class="fas fa-exclamation-triangle" style="font-size:12px;"></i>` : ``;
+                
+                let textoPlano = `Riñón ${ladoTexto} (${val}mm): P${pText}`;
+                lineasReporte.push(textoPlano);
+
+                return `<div style="${colorStyle}">${textoPlano}${warningIcon}</div>`;
+            };
+
+            htmlOut += calcularP(valIzq, "izquierdo");
+            htmlOut += calcularP(valDer, "derecho");
+            // Se separan por punto y coma tal y como solicitaste
+            window.ecografiaReportText = `-Longitud renal ecográfica: ${lineasReporte.join("; ")}`; 
+        }
+    }
+
+    htmlOut += `</span></div>`;
+    return htmlOut;
 }
