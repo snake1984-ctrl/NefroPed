@@ -755,7 +755,7 @@ function performMedicalCalculations(data) {
         if (edadExacta >= 1 && edadExacta < 12) k_cist = (sexo === 'M') ? 87.2 * Math.pow(1.011, edadExacta - 15) : 79.9 * Math.pow(1.004, edadExacta - 12);
         else if (edadExacta >= 12 && edadExacta < 15) k_cist = (sexo === 'M') ? 87.2 * Math.pow(1.011, edadExacta - 15) : 79.9 * Math.pow(0.974, edadExacta - 12);
         else if (edadExacta >= 15 && edadExacta < 18) k_cist = (sexo === 'M') ? 87.2 * Math.pow(0.960, edadExacta - 15) : 79.9 * Math.pow(0.974, edadExacta - 12);
-        else if (edadExacta >= 18) k_cist = (sexo === 'M') ? 77.1 : 41.4;
+        else if (edadExacta >= 18) k_cist = (sexo === 'M') ? 77.1 : 68.3;
 
         if (k_cist > 0 && cistC > 0) ckid_u25_cistc = k_cist * (1 / cistC);
         if (ckid_u25_cr > 0 && ckid_u25_cistc > 0) ckid_u25_combinado = (ckid_u25_cr + ckid_u25_cistc) / 2;
@@ -1567,4 +1567,5 @@ function generarResultadoEcografia() {
 
     htmlOut += `</span></div>`;
     return htmlOut;
+
 }
