@@ -1,4 +1,4 @@
-const CACHE_NAME = 'nefroped-v25'; // <--- ACUÉRDATE DE CAMBIAR ESTO AL SUBIR
+const CACHE_NAME = 'nefroped-v26'; // <--- ACUÉRDATE DE CAMBIAR ESTO AL SUBIR
 
 const urlsToCache = [
   './',
@@ -6,7 +6,7 @@ const urlsToCache = [
   './styles.css',
   './scripts.js',
   'https://cdn.jsdelivr.net/npm/sweetalert2@11',
-  'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js',
+  'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js',
   'https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js',
   'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css'
 ];
@@ -53,6 +53,7 @@ self.addEventListener('fetch', event => {
       .catch(() => caches.match(event.request).then(res => res || caches.match('./index.html')))
   );
 });
+
 
 
 
