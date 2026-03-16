@@ -249,7 +249,7 @@ function calcularEdad() {
     const nacimiento = new Date(añoNac, mesNac - 1, diaNac);
     const analitica = new Date(añoAnal, mesAnal - 1, diaAnal);
 
-    // NUEVO: Validación estricta de fechas imposibles (ej. 31/02/2020)
+    // Validación fechas imposibles (ej. 31/02/2020)
     if (
         nacimiento.getDate() !== diaNac || nacimiento.getMonth() !== mesNac - 1 || nacimiento.getFullYear() !== añoNac ||
         analitica.getDate() !== diaAnal || analitica.getMonth() !== mesAnal - 1 || analitica.getFullYear() !== añoAnal
@@ -262,7 +262,16 @@ function calcularEdad() {
         document.getElementById('edad_calculada').value = 'Fechas inválidas';
         return;
     }
-    
+
+    // ── NUEVO: bloqueo fechas futuras ──────────────────────────
+    const hoy = new Date();
+    hoy.setHours(0, 0, 0, 0);
+    if (nacimiento > hoy || analitica > hoy) {
+        document.getElementById('edad_calculada').value = 'Fecha futura';
+        return;
+    }
+    // ──────────────────────────────────────────────────────────
+
     let años = añoAnal - añoNac;
     let meses = mesAnal - mesNac;
     if (diaAnal < diaNac) meses--;
@@ -270,7 +279,6 @@ function calcularEdad() {
     
     document.getElementById('edad_calculada').value = `${años} años ${meses} meses`;
     
-    // Usamos AppState porque ya implementamos el Punto 11
     AppState.edadEnAños = años;
     AppState.edadEnMeses = meses;
     AppState.edadTotalMeses = años * 12 + meses;
@@ -751,6 +759,19 @@ function calculateResults() {
             });
             return; // Cortamos la ejecución, no se calcula nada
         }
+        // BLOQUEO C: fechas futuras
+            const hoy = new Date();
+            hoy.setHours(0, 0, 0, 0);
+            if (fechaNacimiento > hoy || fechaAnalitica > hoy) {
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Fechas incongruentes',
+                    text: 'Las fechas no pueden ser posteriores a hoy.',
+                    confirmButtonColor: '#ef4444'
+                });
+                return;
+            }
+
     }
     // 3. Si hay datos y las fechas tienen sentido lógico, validamos qué falta
     const camposVacios = validarTodosCampos();
