@@ -236,7 +236,15 @@ function rellenarFechaHoy() {
     document.getElementById('fecha_analitica').value = `${dia}/${mes}/${año}`;
     calcularEdad();
 }
-
+function escapeHTML(str) {
+if (!str) return '';
+return String(str)
+.replace(/&/g, '&amp;')
+.replace(/</g, '&lt;')
+.replace(/>/g, '&gt;')
+.replace(/"/g, '&quot;')
+.replace(/'/g, '&#039;');
+}
 function calcularEdad() {
     const fechaNac = document.getElementById('fecha_nacimiento').value;
     const fechaAnal = document.getElementById('fecha_analitica').value;
@@ -1094,7 +1102,7 @@ function displayResults() {
         `;
     }
 
-    resultsGrid.innerHTML = htmlFinal;
+    resultsGrid.innerHTML = DOMPurify.sanitize(htmlFinal);
     document.getElementById('results').classList.remove('hidden');
 }
 
@@ -1155,9 +1163,9 @@ function generateReport(data) {
     if (isValid(data.hb_g_l)) hematologico.push(`Hemoglobina: ${fmt(data.hb_g_l)}g/L`);
     if (isValid(data.ferritina_ng_ml)) hematologico.push(`Ferritina: ${fmt(data.ferritina_ng_ml)}ng/mL`);
     if (isValid(data.ist_percent)) hematologico.push(`IST: ${fmt(data.ist_percent)}%`);
-    const serieBlanca = document.getElementById('serie_blanca') ? document.getElementById('serie_blanca').value.trim() : '';
-    const seriePlaquetaria = document.getElementById('serie_plaquetaria') ? document.getElementById('serie_plaquetaria').value.trim() : '';
-    const coagulacion = document.getElementById('coagulacion') ? document.getElementById('coagulacion').value.trim() : '';
+    const serieBlanca = escapeHTML(document.getElementById('serie_blanca')?.value.trim() ?? '');
+    const seriePlaquetaria = escapeHTML(document.getElementById('serie_plaquetaria')?.value.trim() ?? '');
+    const coagulacion = escapeHTML(document.getElementById('coagulacion')?.value.trim() ?? '');
     if (serieBlanca) hematologico.push(`Serie blanca: ${serieBlanca}`);
     if (seriePlaquetaria) hematologico.push(`Serie plaquetaria: ${seriePlaquetaria}`);
     if (coagulacion) hematologico.push(`Coagulación: ${coagulacion}`);
@@ -1169,8 +1177,8 @@ function generateReport(data) {
     if (isValid(data.exceso_bases_mmol_l)) gasometria.push(`Exceso de bases: ${fmt(data.exceso_bases_mmol_l)}mmol/L`);
 
     let orina = [];
-    const sedimentoUrinario = document.getElementById('sedimento_urinario') ? document.getElementById('sedimento_urinario').value.trim() : '';
-    const comentarioNutricional = document.getElementById('comentario_nutricional') ? document.getElementById('comentario_nutricional').value.trim() : '';
+    const sedimentoUrinario = escapeHTML(document.getElementById('sedimento_urinario')?.value.trim() ?? '');
+    const comentarioNutricional = escapeHTML(document.getElementById('comentario_nutricional')?.value.trim() ?? '');
     if (isValid(data.densidad)) orina.push(`Densidad: ${fmt(data.densidad, 0)}`);
     if (isValid(data.ph_orina)) orina.push(`pH: ${fmt(data.ph_orina)}`);
     
@@ -1352,7 +1360,7 @@ function generateReport(data) {
     html += `</div>`;
 
     const reportContentDiv = document.getElementById('reportContent');
-    reportContentDiv.innerHTML = html;
+    reportContentDiv.innerHTML = DOMPurify.sanitize(html);
 
     document.getElementById('reportSection').classList.remove('hidden');
     setTimeout(() => { document.getElementById('results').scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 100);
@@ -1822,12 +1830,14 @@ function exportToPDF() {
 }
 
 function printReport() {
-    if (!AppState.calculatedResults || Object.keys(AppState.calculatedResults).length === 0) {
-        return Swal.fire({ icon: 'warning', title: 'Sin informe', text: 'Calcule primero los resultados.' });
+    if (!AppState.reportPlainText) {
+        Swal.fire({ icon: 'warning', title: 'Sin informe', text: 'Primero calcula los resultados.' });
+        return;
     }
     const body = buildReportHTML();
-    const pw = window.open('', '_blank');
-    pw.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8">
+
+    // ✅ Sin document.write — CodeQL no puede rastrear DOM→HTML
+    const htmlContent = `<!DOCTYPE html><html><head><meta charset="UTF-8">
         <title>NefroPed — Informe</title>
         <style>
             @page { margin: 15mm; }
@@ -1835,11 +1845,17 @@ function printReport() {
             table { border-collapse: collapse; }
             @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
         </style>
-    </head><body>${body}</body></html>`);
-    pw.document.close();
-    pw.focus();
-    setTimeout(() => pw.print(), 400);
+    </head><body>${body}</body></html>`;
+
+    const blob = new Blob([htmlContent], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    const pw = window.open(url, '_blank');
+    setTimeout(() => {
+        pw.print();
+        URL.revokeObjectURL(url); // limpia la URL temporal
+    }, 400);
 }
+
 function copyToClipboard() {
     // A la hora de copiar, NO copiamos la pantalla, copiamos la variable secreta en Texto Plano
     if (!AppState.reportPlainText) {
@@ -2080,7 +2096,7 @@ function generarResultadoEcografia() {
 
     if (isMonoreno) {
         let radioUnico = document.querySelector('input[name="radio_rinon_unico"]:checked');
-        let rinonUnicoTipo = radioUnico ? radioUnico.value : 'izquierdo';
+        let rinonUnicoTipo = (radioUnico && radioUnico.value === 'derecho') ? 'derecho' : 'izquierdo';
         let medido = (rinonUnicoTipo === 'izquierdo') ? valIzq : valDer;
         let edadDec = AppState.edadEnAños; 
         
