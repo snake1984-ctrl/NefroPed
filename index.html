@@ -18,6 +18,8 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
     <link rel="manifest" href="manifest.json" />
     <link rel="apple-touch-icon" href="icon-192.png" />
+    <link rel="icon" type="image/png" sizes="512x512" href="./icon-512.png">
+    <link rel="icon" type="image/png" sizes="192x192" href="./icon-192.png">
     
     <meta name="theme-color" content="#0f172a" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -29,6 +31,9 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
 </head>
 <body>
+    <div id="test-mode-banner">
+        🧪 MODO TEST ACTIVO — los datos cargados son ficticios
+    </div>
   <div class="container">
         <header class="app-header">
             <h1 class="app-title">NefroPed</h1>
@@ -141,8 +146,8 @@
                             <input type="number" id="cistatina_c_mg_l" name="cistatina_c_mg_l" class="form-control" step="any" min="0">
                         </div>
                         <div class="form-group">
-                            <label class="form-label" for="comentario_nutricional">Comentario Nutricional</label>
-                            <textarea id="comentario_nutricional" name="comentario_nutricional" class="form-control" placeholder="(Texto libre)" aria-label="Comentarios nutricionales"></textarea>
+                            <label class="form-label" for="comentario_nutricional">Otros</label>
+                            <textarea id="comentario_nutricional" name="comentario_nutricional" class="form-control" placeholder="Texto libre" aria-label="Otros"></textarea>
                         </div>
                     </div>
                 </section>
@@ -238,7 +243,7 @@
                         </div>
                     </div>
                 </section>
-<section id="hematologia" class="tab-content" role="tabpanel" aria-labelledby="hematologia-tab">
+                    <section id="hematologia" class="tab-content" role="tabpanel" aria-labelledby="hematologia-tab">
                     <h3 class="section-title"><i class="fas fa-syringe"></i> Hematología</h3>
                     <div class="form-grid-3col">
                         <div class="form-group">
@@ -253,6 +258,23 @@
                             <label class="form-label" for="ist_percent">IST (%)</label>
                             <input type="number" id="ist_percent" name="ist_percent" class="form-control" step="any" min="0" max="100" aria-label="Índice de Saturación de Transferrina">
                         </div>
+                        <!-- Serie blanca -->
+                            <div class="form-group">
+                                <label for="serie_blanca" class="form-label">Serie blanca</label>
+                                <textarea id="serie_blanca" class="form-control" placeholder="Hallazgos de serie blanca..."></textarea>
+                            </div>
+
+                            <!-- Serie plaquetaria -->
+                            <div class="form-group">
+                                <label for="serie_plaquetaria" class="form-label">Serie plaquetaria</label>
+                                <textarea id="serie_plaquetaria" class="form-control" placeholder="Hallazgos de serie plaquetaria..."></textarea>
+                            </div>
+
+                            <!-- Coagulación -->
+                            <div class="form-group">
+                                <label for="coagulacion" class="form-label">Coagulación</label>
+                                <textarea id="coagulacion" class="form-control" placeholder="Hallazgos de coagulación..."></textarea>
+                            </div>
                     </div>
                 </section>
                 <section id="orina-24h" class="tab-content" role="tabpanel" aria-labelledby="orina-24h-tab">
@@ -470,7 +492,3 @@
 </body>
 
 </html>
-
-
-
-

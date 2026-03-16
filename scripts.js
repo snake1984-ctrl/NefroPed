@@ -61,31 +61,37 @@ function mostrarAvisoActualizacion(worker) {
 // ===============================================
 // 2. VARIABLES GLOBALES Y CONFIGURACIÓN
 // ===============================================
-// Campos matemáticos (excluye Edad calculada, textos largos, y los checkboxes/radios del monoreno)
-const fieldIds = Array.from(document.querySelectorAll('#clinicalForm input[id]:not([id="edad_calculada"]):not([type="checkbox"]):not([type="radio"]), #clinicalForm select[id]')).map(el => el.id);
+let fieldIds = [];
+let camposParaContador = [];
 
-// Todos los campos editables para el contador visual (suma 52 campos en total)
-const camposParaContador = [...fieldIds, 'sedimento_urinario', 'comentario_nutricional'];
-window.calculatedResults = {};
-let reportText = '';
-let primeraValidacion = false; 
-
-window.edadEnAños = 0;
-window.edadEnMeses = 0;
-window.edadTotalMeses = 0;
-window.valoresFueraRango = [];
+const AppState = {
+    calculatedResults: {},
+    primeraValidacion: false,
+    edadEnAños: 0,
+    edadEnMeses: 0,
+    edadTotalMeses: 0,
+    valoresFueraRango: [],
+    ecografiaReportText: ""
+};
 
 // ===============================================
 // 3. INICIALIZACIÓN PRINCIPAL (DOMContentLoaded Maestro)
 // ===============================================
 document.addEventListener('DOMContentLoaded', function() {
-    console.log('🚀 Inicializando aplicación...');
+    if (location.hostname === 'localhost') console.log('🚀 Dev mode');
     
+    // 1. Primero leemos todos los IDs del HTML
+// 1. Leemos los IDs, pero EXCLUIMOS la edad calculada, los checkboxes y los radios
+    fieldIds = Array.from(document.querySelectorAll('#clinicalForm input[id], #clinicalForm select[id]'))
+        .filter(input => input.id !== 'edad_calculada' && input.type !== 'checkbox' && input.type !== 'radio')
+        .map(input => input.id);    
+    // 2. Luego montamos el contador sumando los de texto
+    camposParaContador = [...fieldIds, 'sedimento_urinario', 'comentario_nutricional', 'serie_blanca', 'serie_plaquetaria', 'coagulacion'];
+    // 3. Lanzamos el resto de funciones
     configureNumericValidation();
     configurarEventosFechas();
     verifyFieldsExist();
     setupTabNavigation();
-    setupTabNavigationScroll();
     setupFormEvents();
     setupButtons();
     updateFieldCounter();
@@ -105,34 +111,37 @@ document.addEventListener('DOMContentLoaded', function() {
 // 4. FUNCIONES DE MODO TEST
 // ===============================================
 function activarModoTest() {
-    console.log('✅ MODO TEST ACTIVADO');
     document.body.classList.add('modo-test');
     const botonTest = document.getElementById('btn-cargar-datos-test');
     if (botonTest) botonTest.style.display = 'inline-block';
+    document.getElementById('test-mode-banner')?.classList.add('visible');
+    Swal.fire({ icon: 'success', title: '¡Modo TEST activado!', timer: 1200, showConfirmButton: false });
 }
 
 function desactivarModoTest() {
-    console.log('❌ MODO TEST DESACTIVADO');
     document.body.classList.remove('modo-test');
     const botonTest = document.getElementById('btn-cargar-datos-test');
     if (botonTest) botonTest.style.display = 'none';
+    document.getElementById('test-mode-banner')?.classList.remove('visible');
+    Swal.fire({ icon: 'info', title: 'Modo TEST desactivado', timer: 1200, showConfirmButton: false });
 }
+
 
 function setupSecretTap() {
     let testTapCount = 0;
     let tapTimer = null;
     const logo = document.querySelector('.app-title');
-    
+
     function handleTap(e) {
         if (e) e.preventDefault();
         testTapCount++;
         if (testTapCount >= 5) {
-            if(document.body.classList.contains('modo-test')) {
+            if (document.body.classList.contains('modo-test')) {
                 desactivarModoTest();
-                alert('Modo TEST desactivado');
+                Swal.fire({ icon: 'info', title: 'Modo TEST desactivado', timer: 1200, showConfirmButton: false });
             } else {
                 activarModoTest();
-                alert('¡Modo TEST activado!');
+                Swal.fire({ icon: 'success', title: '¡Modo TEST activado!', timer: 1200, showConfirmButton: false });
             }
             testTapCount = 0;
             if (tapTimer) clearTimeout(tapTimer);
@@ -144,11 +153,12 @@ function setupSecretTap() {
     }
 
     if (logo) {
-        logo.addEventListener('click', handleTap, {passive: false});
-        logo.addEventListener('touchstart', handleTap, {passive: false});
-        logo.addEventListener('touchend', e => e.preventDefault(), {passive: false});
+        logo.addEventListener('click', handleTap, { passive: false });
+        logo.addEventListener('touchstart', handleTap, { passive: false });
+        logo.addEventListener('touchend', e => e.preventDefault(), { passive: false });
     }
 }
+
 
 // ===============================================
 // GESTIÓN DEL MODO OSCURO (FOOTER)
@@ -196,7 +206,7 @@ function setupAutoSave() {
             const data = JSON.parse(savedData);
             Object.keys(data).forEach(key => {
                 const input = document.getElementById(key);
-                if (input && data[key] !== 0 && data[key] !== '') input.value = data[key];
+                if (input && data[key] !== null && data[key] !== '') input.value = data[key];
             });
             calcularEdad();
         } catch (e) {
@@ -208,6 +218,9 @@ function setupAutoSave() {
         const data = getFormData();
         data.sedimento_urinario = document.getElementById('sedimento_urinario')?.value || '';
         data.comentario_nutricional = document.getElementById('comentario_nutricional')?.value || '';
+        data.serie_blanca = document.getElementById('serie_blanca')?.value || '';
+        data.serie_plaquetaria = document.getElementById('serie_plaquetaria')?.value || '';
+        data.coagulacion = document.getElementById('coagulacion')?.value || '';
         sessionStorage.setItem('calcRenalDataTemporales', JSON.stringify(data));
     });
 }
@@ -235,20 +248,40 @@ function calcularEdad() {
     
     const nacimiento = new Date(añoNac, mesNac - 1, diaNac);
     const analitica = new Date(añoAnal, mesAnal - 1, diaAnal);
+
+    // Validación fechas imposibles (ej. 31/02/2020)
+    if (
+        nacimiento.getDate() !== diaNac || nacimiento.getMonth() !== mesNac - 1 || nacimiento.getFullYear() !== añoNac ||
+        analitica.getDate() !== diaAnal || analitica.getMonth() !== mesAnal - 1 || analitica.getFullYear() !== añoAnal
+    ) {
+        document.getElementById('edad_calculada').value = 'Fecha inexistente';
+        return;
+    }
+
     if (nacimiento >= analitica) {
         document.getElementById('edad_calculada').value = 'Fechas inválidas';
         return;
     }
-    
+
+    // ── NUEVO: bloqueo fechas futuras ──────────────────────────
+    const hoy = new Date();
+    hoy.setHours(0, 0, 0, 0);
+    if (nacimiento > hoy || analitica > hoy) {
+        document.getElementById('edad_calculada').value = 'Fecha futura';
+        return;
+    }
+    // ──────────────────────────────────────────────────────────
+
     let años = añoAnal - añoNac;
     let meses = mesAnal - mesNac;
     if (diaAnal < diaNac) meses--;
     if (meses < 0) { años--; meses += 12; }
     
     document.getElementById('edad_calculada').value = `${años} años ${meses} meses`;
-    window.edadEnAños = años;
-    window.edadEnMeses = meses;
-    window.edadTotalMeses = años * 12 + meses;
+    
+    AppState.edadEnAños = años;
+    AppState.edadEnMeses = meses;
+    AppState.edadTotalMeses = años * 12 + meses;
 }
 
 function configurarEventosFechas() {
@@ -313,8 +346,9 @@ function configureNumericValidation() {
     camposDecimales.forEach(fieldId => {
         const input = document.getElementById(fieldId);
         if (input) {
-            input.type = 'text';
-            input.setAttribute('inputmode', 'decimal');
+            input.type = 'text';  // ✅ Mantener para validación personalizada
+            input.setAttribute('inputmode', 'decimal');  // ✅ OK
+            input.setAttribute('pattern', '[0-9,.-]*');  // ✅ Añadir patrón para iOS
             input.addEventListener('input', function(e) {
                 let value = e.target.value.replace(/\./g, ',');
                 value = (fieldId === 'exceso_bases_mmol_l') ? value.replace(/[^0-9,-]/g, '') : value.replace(/[^0-9,]/g, '');
@@ -345,35 +379,48 @@ function verifyFieldsExist() {
 }
 
 function setupTabNavigation() {
-    document.querySelectorAll('.tab-button').forEach(button => {
-        button.addEventListener('click', function() { switchTab(this.getAttribute('data-tab'), this); });
-    });
-}
-
-function setupTabNavigationScroll() {
     document.querySelectorAll('.tab-button').forEach((btn, i, allBtns) => {
-        btn.onclick = function() {
+        btn.addEventListener('click', function() { 
+            // 1. Cambiamos de pestaña
+            switchTab(this.getAttribute('data-tab'), this); 
+            
+            // 2. Comprobamos si necesitamos hacer scroll (para móviles)
             const container = btn.closest('.tabs') || btn.closest('.nav-tabs');
             if (container && (container.scrollWidth > container.clientWidth)) {
                 const btnRect = btn.getBoundingClientRect();
                 const contRect = container.getBoundingClientRect();
-                if ((btnRect.right >= contRect.right - 8) && (i < allBtns.length - 1)) container.scrollLeft = container.scrollWidth;
-                if ((btnRect.left <= contRect.left + 8) && (i > 0)) container.scrollLeft = 0;
+                if ((btnRect.right >= contRect.right - 8) && (i < allBtns.length - 1)) {
+                    container.scrollTo({ left: container.scrollWidth, behavior: 'smooth' });
+                }
+                if ((btnRect.left <= contRect.left + 8) && (i > 0)) {
+                    container.scrollTo({ left: 0, behavior: 'smooth' });
+                }
             }
-        };
+        });
     });
 }
 
 function switchTab(tabId, buttonElement) {
     document.querySelectorAll('.tab-content').forEach(tab => tab.classList.remove('active'));
-    document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
+    
+    // Apagamos todas las pestañas visualmente y para los lectores de pantalla
+    document.querySelectorAll('.tab-button').forEach(btn => {
+        btn.classList.remove('active');
+        btn.setAttribute('aria-selected', 'false'); // NUEVO: Apagar ARIA
+    });
+    
     const targetTab = document.getElementById(tabId);
     if (targetTab) targetTab.classList.add('active');
-    if (buttonElement) buttonElement.classList.add('active');
+    
+    // Encendemos la pestaña clickeada visualmente y para los lectores de pantalla
+    if (buttonElement) {
+        buttonElement.classList.add('active');
+        buttonElement.setAttribute('aria-selected', 'true'); // NUEVO: Encender ARIA
+    }
 }
 
 function actualizarMarcadoresEnTiempoReal() {
-    if (!primeraValidacion) return;
+    if (!AppState.primeraValidacion) return;
     
     // Lista de todas las pestañas y sus campos asociados
     const secciones = {
@@ -433,7 +480,7 @@ function setupFormEvents() {
 
 function setupButtons() {
     const calculateButton = document.getElementById('calculateButton');
-    if (calculateButton) calculateButton.addEventListener('click', () => { primeraValidacion = true; actualizarMarcadoresEnTiempoReal(); calculateResults(); });
+    if (calculateButton) calculateButton.addEventListener('click', () => { AppState.primeraValidacion = true; actualizarMarcadoresEnTiempoReal(); calculateResults(); });
     
     const copyClipboardButton = document.getElementById('copyClipboardButton');
     if (copyClipboardButton) copyClipboardButton.addEventListener('click', copyToClipboard);
@@ -462,7 +509,7 @@ function clearFormSilent() {
         if (input) input.value = '';
     });
 
-    ['sedimento_urinario', 'comentario_nutricional', 'edad_calculada'].forEach(id => {
+    ['sedimento_urinario', 'comentario_nutricional', 'serie_blanca', 'serie_plaquetaria', 'coagulacion', 'edad_calculada'].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.value = '';
     });
@@ -484,9 +531,11 @@ function clearFormSilent() {
     const reportContent = document.getElementById('reportContent'); 
     if(reportContent) reportContent.textContent = '';
      
-    window.calculatedResults = {}; 
+    AppState.calculatedResults = {}; 
     reportText = ''; 
-    primeraValidacion = false;
+    AppState.primeraValidacion = false;
+    AppState.reportPlainText = '';
+    AppState.ecografiaReportText = '';
     
     document.querySelectorAll('.tab-error').forEach(tab => tab.classList.remove('tab-error'));
     
@@ -498,14 +547,25 @@ function clearFormSilent() {
 function clearForm() { confirmarLimpiarFormulario(); }
 
 function loadSampleData() {
+    // 1. Fechas dinámicas (Paciente siempre tiene 12 años exactos hoy)
+    const hoy = new Date();
+    const diaHoy = hoy.getDate().toString().padStart(2, '0');
+    const mesHoy = (hoy.getMonth() + 1).toString().padStart(2, '0');
+    const anioHoy = hoy.getFullYear();
+    const anioNac = anioHoy - 12;
+
     const sampleData = {
-        fecha_nacimiento: '15/03/2012', fecha_analitica: '20/10/2024', peso_kg: 35.5, talla_cm: 140.0, sexo: 'M',
+        fecha_nacimiento: `${diaHoy}/${mesHoy}/${anioNac}`, 
+        fecha_analitica: `${diaHoy}/${mesHoy}/${anioHoy}`, 
+        peso_kg: 35.5, talla_cm: 140.0, sexo: 'M',
         urea_mg_dl: 28, creatinina_enz_mg_dl: 0.65, au_plasma_mg_dl: 4.2, na_plasma_meq_l: 138.5, k_plasma_meq_l: 4.1, cl_plasma_meq_l: 105.2, fosfatasa_alcalina_u_l: 180, ca_plasma_mg_dl: 9.8, p_plasma_mg_dl: 4.5, mg_plasma_mg_dl: 1.9, pth_pg_ml: 35.2, vitamina_d_ng_ml: 28.5, comentario_nutricional: "Paciente normopeso. Dieta equilibrada con buena tolerancia oral. Sin incidencias", cistatina_c_mg_l: 0.92,
         ph_plasma: 7.38, pco2_mmhg: 42.1, hco3_mmol_l: 22.8, exceso_bases_mmol_l: -1.2,
         densidad: 1018, ph_orina: 6.2, sedimento_urinario: "Hematíes 3-5/campo. Leucocitos aislados. Ausencia de cilindros.", au_orina_mg_dl: 45.8, na_orina_meq_l: 85.2, k_orina_meq_l: 55.1, cl_orina_meq_l: 98.5, osmolalidad_orina_mosm_kg: 320, ca_orina_mg_dl: 12.5, fosforo_orina_mg_dl: 18.2, magnesio_orina_mg_dl: 8.5, albumina_orina_mg_dl: 3.2, creatinina_orina_mg_dl: 68.5, proteinas_orina_mg_dl: 8.1, citrato_orina_mg_dl: 85.2, oxalato_orina_mg_dl: 15.8,
         au_24h_mg: 420, ca_24h_mg: 85, p_24h_mg: 520, mg_24h_mg: 65, albumina_24h_mg: 25, proteinas_24h_mg: 95, citrato_24h_mg: 485, oxalato_24h_mg: 28,
-        hb_g_l: 125, ferritina_ng_ml: 45.8, ist_percent: 22.5,
-        rinon_izquierdo_mm: 98, rinon_derecho_mm: 95 // Datos eco
+        hb_g_l: 125, ferritina_ng_ml: 45.8, ist_percent: 22.5,serie_blanca: 'Leucocitos 6.200/µL. Fórmula normal. Sin blastos ni atipias.',
+        serie_plaquetaria: 'Plaquetas 285.000/µL. Morfología normal.',
+        coagulacion: 'TP 12.1s (100%). TTPA 31.2s. Fibrinógeno 2.8 g/L.',
+        rinon_izquierdo_mm: 98, rinon_derecho_mm: 95 
     };
     
     // Desmarcar monoreno al cargar los datos de test
@@ -541,7 +601,7 @@ function marcarError(campoId, tieneError) {
 
 function validarTodosCampos() {
     let camposVacios = [];
-    primeraValidacion = true; // Activa el chequeo "en directo"
+    AppState.primeraValidacion = true; // Activa el chequeo "en directo"
     
     fieldIds.forEach(campoId => {
         const campo = document.getElementById(campoId);
@@ -594,7 +654,7 @@ function evaluarRango(parametro, valor, edad, edadMeses) {
             rangoMin = 90; rangoTexto = '>90ml/min/1.73m²'; return { enRango: valor >= rangoMin, tipo: valor < rangoMin ? 'bajo' : 'normal', rangoTexto };
             
         // Fórmulas para Lactantes y Neonatos (Ajuste dinámico por mes)
-        case 'schwartz_neo': case 'schwartz_lact': case 'bokenkamp':
+        case 'schwartz_neo': case 'schwartz_lact': case 'bokenkamp':{
             const limites_minimos = {
                 1: 35, 2: 40, 3: 45, 4: 50, 5: 55, 6: 60, 7: 63, 8: 65, 9: 68, 10: 70, 
                 11: 73, 12: 75, 13: 76, 14: 77, 15: 78, 16: 79, 17: 81, 18: 82, 19: 83, 
@@ -604,7 +664,7 @@ function evaluarRango(parametro, valor, edad, edadMeses) {
             rangoMin = limites_minimos[mesUsado] || 90;
             rangoTexto = `>${rangoMin}ml/min/1.73m² (Normal para ${mesUsado} meses)`;
             return { enRango: valor >= rangoMin, tipo: valor < rangoMin ? 'bajo' : 'normal', rangoTexto };
-
+        }
         case 'efau': if (edad >= 1 && edad < 5) { rangoMin = 11; rangoMax = 17; rangoTexto = '11–17'; } else if (edad >= 5) { rangoMin = 4.45; rangoMax = 9.99; rangoTexto = '4.45–9.99'; } else esRangoValido = false; break;
         case 'efna': rangoMin = 0.42; rangoMax = 0.84; rangoTexto = '0.42–0.84'; break;
         case 'efk': rangoMin = 5.19; rangoMax = 11.67; rangoTexto = '5.19–11.67'; break;
@@ -645,14 +705,15 @@ function getFormData() {
         if (input) {
             let value = input.value;
             if (['fecha_nacimiento', 'fecha_analitica', 'sexo'].includes(fieldId)) { data[fieldId] = value; return; }
-            if (value) value = value.replace(',', '.');
+            if (value) value = value.replace(/,/g, '.'); // ✅ flag global: reemplaza todas las comas
             const numValue = parseFloat(value);
             data[fieldId] = isNaN(numValue) ? 0 : numValue;
         }
     });
-    data.edad = window.edadEnAños || 0;
+    data.edad = AppState.edadEnAños || 0;
     return data;
 }
+
 
 function calculateResults() {
     // 1. Comprobación de seguridad: Si todo está vacío, no hacemos absolutamente nada.
@@ -664,7 +725,7 @@ function calculateResults() {
         return; // Fin de la función, la página no se altera
     }
 
-    // 2. BLINDAJE DE FECHAS: Evitar viajes en el tiempo
+// 2. BLINDAJE DE FECHAS: Evitar viajes en el tiempo y fechas inventadas
     const inputFechaNac = document.getElementById('fecha_nacimiento')?.value;
     const inputFechaAnal = document.getElementById('fecha_analitica')?.value;
     
@@ -674,18 +735,44 @@ function calculateResults() {
         const fechaNacimiento = new Date(añoNac, mesNac - 1, diaNac);
         const fechaAnalitica = new Date(añoAnal, mesAnal - 1, diaAnal);
         
+        // BLOQUEO A: Fechas inexistentes (ej. 31 de febrero o 29 feb en año NO bisiesto)
+        if (
+            fechaNacimiento.getDate() !== diaNac || fechaNacimiento.getMonth() !== mesNac - 1 || fechaNacimiento.getFullYear() !== añoNac ||
+            fechaAnalitica.getDate() !== diaAnal || fechaAnalitica.getMonth() !== mesAnal - 1 || fechaAnalitica.getFullYear() !== añoAnal
+        ) {
+            Swal.fire({
+                icon: 'error',
+                title: 'Fecha inexistente',
+                text: 'Has introducido una fecha que no existe en el calendario (revise los días 31 y los años bisiestos).',
+                confirmButtonColor: '#ef4444'
+            });
+            return; // Cortamos la ejecución, no se calcula nada
+        }
+
+        // BLOQUEO B: Viajes en el tiempo (analítica antes de nacer)
         if (fechaAnalitica < fechaNacimiento) {
-            // Lanzamos alerta roja y bloqueamos todo el proceso
             Swal.fire({
                 icon: 'error',
                 title: 'Fechas incongruentes',
                 text: 'La fecha de la analítica no puede ser anterior a la fecha de nacimiento. Por favor, corríjalas para continuar.',
-                confirmButtonColor: '#ef4444' // Rojo alerta
+                confirmButtonColor: '#ef4444' 
             });
-            return; // Cortamos la ejecución aquí, no se calcula nada
+            return; // Cortamos la ejecución, no se calcula nada
         }
-    }
+        // BLOQUEO C: fechas futuras
+            const hoy = new Date();
+            hoy.setHours(0, 0, 0, 0);
+            if (fechaNacimiento > hoy || fechaAnalitica > hoy) {
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Fechas incongruentes',
+                    text: 'Las fechas no pueden ser posteriores a hoy.',
+                    confirmButtonColor: '#ef4444'
+                });
+                return;
+            }
 
+    }
     // 3. Si hay datos y las fechas tienen sentido lógico, validamos qué falta
     const camposVacios = validarTodosCampos();
 
@@ -727,7 +814,7 @@ function calculateResults() {
 function performMedicalCalculations(data) {
     const superficieCorporal = Math.sqrt(data.peso_kg * data.talla_cm / 3600);
     const imc = data.peso_kg > 0 && data.talla_cm > 0 ? data.peso_kg / Math.pow(data.talla_cm / 100, 2) : 0;
-    const edadExacta = window.edadEnAños + (window.edadEnMeses / 12);
+    const edadExacta = AppState.edadEnAños + (AppState.edadEnMeses / 12);
     const talla_m = data.talla_cm / 100;
 
     // --- 1. NUEVO MOTOR DE FILTRADO GLOMERULAR (eFG) PEDIÁTRICO ---
@@ -868,7 +955,7 @@ function performMedicalCalculations(data) {
 // =========================================================
 function executeCalculations() {
     const data = getFormData();
-    window.valoresFueraRango = [];
+    AppState.valoresFueraRango = [];
 
     const calcButton = document.querySelector('.btn-calcular');
     
@@ -876,7 +963,7 @@ function executeCalculations() {
     calcButton.innerHTML = 'Calculando... <i class="fas fa-spinner fa-spin" style="margin-left: 8px;"></i>';
 
     try {
-        window.calculatedResults = performMedicalCalculations(data);
+        AppState.calculatedResults = performMedicalCalculations(data);
 
         setTimeout(() => {
             displayResults();
@@ -896,10 +983,10 @@ function executeCalculations() {
 }
 
 function displayResults() {
-    const results = window.calculatedResults;
+    const results = AppState.calculatedResults;
     if (!results) return;
-    const edad = window.edadEnAños || 0;
-    const edadMeses = window.edadEnMeses || 0;
+    const edad = AppState.edadEnAños || 0;
+    const edadMeses = AppState.edadEnMeses || 0;
     
     const parametros = [
         { key: 'vpercent', nombre: 'V%', unidad: '%' }, 
@@ -940,7 +1027,7 @@ function displayResults() {
     const emptyState = document.getElementById('empty-state-results');
     if(emptyState) emptyState.classList.add('hidden');
  
-    window.valoresFueraRango = []; 
+    AppState.valoresFueraRango = []; 
 
     parametros.forEach(param => {
         const valor = results[param.key];
@@ -948,7 +1035,7 @@ function displayResults() {
             const evaluacion = evaluarRango(param.key, valor, edad, edadMeses);
             if (!evaluacion.enRango) {
                 const tipoFuera = evaluacion.tipo === 'alto' ? 'por encima de rango' : 'por debajo de rango';
-                window.valoresFueraRango.push(`${param.nombre} ${param.unidad ? `(${param.unidad})` : ''}: ${valor.toFixed(2)}${param.unidad} ${tipoFuera} (VN ${evaluacion.rangoTexto})`);
+                AppState.valoresFueraRango.push(`${param.nombre} ${param.unidad ? `(${param.unidad})` : ''}: ${valor.toFixed(2)}${param.unidad} ${tipoFuera} (VN ${evaluacion.rangoTexto})`);
             }
         }
     });
@@ -1012,15 +1099,14 @@ function displayResults() {
 }
 
 function generateReport(data) {
-    const results = window.calculatedResults;
-    if (!results) return;
+    const results = AppState.calculatedResults;
+    if (!results || Object.keys(results).length === 0) return;
 
     function isValid(value) { return value != null && !isNaN(value) && value !== 0; }
     function fmt(value, decimals = 2) { return !isValid(value) ? null : parseFloat(value).toFixed(decimals); }
 
     let report = [];
         
-    // Primero recolectamos todos los bloques de analítica
     let hidrosalino = [];
     if (isValid(data.urea_mg_dl)) hidrosalino.push(`Urea: ${fmt(data.urea_mg_dl)}mg/dL`);
     
@@ -1069,6 +1155,12 @@ function generateReport(data) {
     if (isValid(data.hb_g_l)) hematologico.push(`Hemoglobina: ${fmt(data.hb_g_l)}g/L`);
     if (isValid(data.ferritina_ng_ml)) hematologico.push(`Ferritina: ${fmt(data.ferritina_ng_ml)}ng/mL`);
     if (isValid(data.ist_percent)) hematologico.push(`IST: ${fmt(data.ist_percent)}%`);
+    const serieBlanca = document.getElementById('serie_blanca') ? document.getElementById('serie_blanca').value.trim() : '';
+    const seriePlaquetaria = document.getElementById('serie_plaquetaria') ? document.getElementById('serie_plaquetaria').value.trim() : '';
+    const coagulacion = document.getElementById('coagulacion') ? document.getElementById('coagulacion').value.trim() : '';
+    if (serieBlanca) hematologico.push(`Serie blanca: ${serieBlanca}`);
+    if (seriePlaquetaria) hematologico.push(`Serie plaquetaria: ${seriePlaquetaria}`);
+    if (coagulacion) hematologico.push(`Coagulación: ${coagulacion}`);
 
     let gasometria = [];
     if (isValid(data.ph_plasma)) gasometria.push(`pH: ${fmt(data.ph_plasma)}`);
@@ -1078,6 +1170,7 @@ function generateReport(data) {
 
     let orina = [];
     const sedimentoUrinario = document.getElementById('sedimento_urinario') ? document.getElementById('sedimento_urinario').value.trim() : '';
+    const comentarioNutricional = document.getElementById('comentario_nutricional') ? document.getElementById('comentario_nutricional').value.trim() : '';
     if (isValid(data.densidad)) orina.push(`Densidad: ${fmt(data.densidad, 0)}`);
     if (isValid(data.ph_orina)) orina.push(`pH: ${fmt(data.ph_orina)}`);
     
@@ -1113,7 +1206,6 @@ function generateReport(data) {
     if (isValid(results.proteinuria)) orina24h.push(`Proteinuria: ${fmt(results.proteinuria)}mg/m²/día`);
     if (isValid(results.albuminuria)) orina24h.push(`Albuminuria: ${fmt(results.albuminuria)}mg/1.73m²/día`);
 
-    // Comprobar si hay ALGÚN dato analítico para imprimir el encabezado "1) Analítica"
     let hayDatosAnalitica = (hidrosalino.length + fosfocalcico.length + hematologico.length + gasometria.length + orina.length + cocientes.length + orina24h.length) > 0;
 
     if (hayDatosAnalitica) {
@@ -1124,19 +1216,14 @@ function generateReport(data) {
         if (gasometria.length > 0) report.push(`- Gasometría: ${gasometria.join('   ')}`);
         if (orina.length > 0) report.push(`- Orina puntual: ${orina.join('   ')}`);
         if (cocientes.length > 0) report.push(`- Cocientes urinarios: ${cocientes.join('   ')}`);
-        if (orina24h.length > 0) report.push(`- Orina de 24h: ${orina24h.join('   ')}`);
+        if (orina24h.length > 0) report.push(`- Orina de 24h: ${orina24h.join(' | ')}`);
+        
+    }
+    if (AppState.ecografiaReportText) {
+        report.push(`2) Ecografía renal`);
+        report.push(AppState.ecografiaReportText);
     }
 
-    const comentarioNutricional = document.getElementById('comentario_nutricional') ? document.getElementById('comentario_nutricional').value.trim() : '';
-    if (comentarioNutricional) {
-        report.push(`- Nutricional: ${comentarioNutricional}`);
-    }
-
-    if (window.ecografiaReportText) {
-        report.push("\n2) Ecografía renal");
-        report.push(window.ecografiaReportText);
-    }
-    //ESTADIFICACIÓN SEGÚN GUÍAS KDIGO 2024
     function evaluarGradoG(egfr) {
         if (!isValid(egfr)) return null;
         if (egfr >= 90) return "Estadio G1 (Normal o elevado)";
@@ -1159,7 +1246,6 @@ function generateReport(data) {
         };
         const m = meses <= 0 ? 1 : (meses > 24 ? 24 : Math.floor(meses));
         const [g1, g2, g3, g4] = limites[m];
-        
         if (egfr >= g1) return "ERC 1 (Normal o elevado)";
         if (egfr >= g2) return "ERC 2 (Levemente disminuido)";
         if (egfr >= g3) return "ERC 3 (Moderadamente disminuido)";
@@ -1174,139 +1260,599 @@ function generateReport(data) {
         return "Estadio A3 (Muy elevada)";
     }
 
-    const mesesTotales = window.edadTotalMeses || 0;
+    const mesesTotales = AppState.edadTotalMeses || 0;
+    let htmlEstadificacion = "";
 
-    if (window.edadEnAños >= 2) {
+    if (AppState.edadEnAños >= 2) {
         let grados_kdigo = [];
-        
         if (isValid(results.schwartz_bedside)) grados_kdigo.push(`- eGFR Schwartz Bedside: ${evaluarGradoG(results.schwartz_bedside)}`);
         if (isValid(results.ckid_u25_cr)) grados_kdigo.push(`- eGFR CKiD U25 Cr: ${evaluarGradoG(results.ckid_u25_cr)}`);
         if (isValid(results.ekfc_cr)) grados_kdigo.push(`- eGFR EKFC Cr: ${evaluarGradoG(results.ekfc_cr)}`);
-        
         if (isValid(results.ckid_u25_cistc)) grados_kdigo.push(`- eGFR CKiD U25 CistC: ${evaluarGradoG(results.ckid_u25_cistc)}`);
-        if (isValid(results.ekfc_cistc)) grados_kdigo.push(`- eGFR EKFCCystC: ${evaluarGradoG(results.ekfc_cistc)}`); 
-        
+        if (isValid(results.ekfc_cistc)) grados_kdigo.push(`- eGFR EKFCCystC: ${evaluarGradoG(results.ekfc_cistc)}`);
         if (isValid(results.ckid_u25_combinado)) grados_kdigo.push(`- eGFR Combinado (CKiD U25): ${evaluarGradoG(results.ckid_u25_combinado)}`);
-        
         let gradoAlb = (results.albcr !== undefined && results.albcr > 0) ? evaluarGradoA(results.albcr) : null;
         if (gradoAlb) grados_kdigo.push(`- Albuminuria: ${gradoAlb}`);
 
         if (grados_kdigo.length > 0) {
             report.push('\n\nESTADIFICACIÓN SEGÚN GUÍAS KDIGO 2024\n');
             report = report.concat(grados_kdigo); 
+            htmlEstadificacion = `<h4 style="color: #0891b2; margin-bottom: 8px; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px; margin-top: 20px;">Estadificación según guías KDIGO 2024</h4><ul style="margin-top: 0; padding-left: 20px;">`;
+            grados_kdigo.forEach(g => {
+                let part = g.replace('- ', '').split(': ');
+                htmlEstadificacion += `<li style="margin-bottom: 4px;"><strong>${part[0]}:</strong> ${part.slice(1).join(': ')}</li>`;
+            });
+            htmlEstadificacion += `</ul>`;
         }
     } else {
         let grados_lactante = [];
-        
         if (isValid(results.schwartz_neo)) grados_lactante.push(`- eGFR Schwartz neonatal: ${evaluarERC_Lactante(results.schwartz_neo, mesesTotales)}`);
         if (isValid(results.schwartz_lact)) grados_lactante.push(`- eGFR Schwartz lactante: ${evaluarERC_Lactante(results.schwartz_lact, mesesTotales)}`);
         if (isValid(results.schwartz_bedside)) grados_lactante.push(`- eGFR Schwartz Bedside: ${evaluarERC_Lactante(results.schwartz_bedside, mesesTotales)}`);
         if (isValid(results.ckid_u25_cr)) grados_lactante.push(`- eGFR CKiD U25 Cr: ${evaluarERC_Lactante(results.ckid_u25_cr, mesesTotales)}`);
         if (isValid(results.ekfc_cr)) grados_lactante.push(`- eGFR EKFC Cr: ${evaluarERC_Lactante(results.ekfc_cr, mesesTotales)}`);
-        
         if (isValid(results.bokenkamp)) grados_lactante.push(`- eGFR Bökenkamp (CistC): ${evaluarERC_Lactante(results.bokenkamp, mesesTotales)}`);
         if (isValid(results.ckid_u25_cistc)) grados_lactante.push(`- eGFR CKiD U25 CistC: ${evaluarERC_Lactante(results.ckid_u25_cistc, mesesTotales)}`);
         if (isValid(results.ekfc_cistc)) grados_lactante.push(`- eGFR EKFCCystC: ${evaluarERC_Lactante(results.ekfc_cistc, mesesTotales)}`);
-        
         if (isValid(results.ckid_u25_combinado)) grados_lactante.push(`- eGFR Combinado (CKiD U25): ${evaluarERC_Lactante(results.ckid_u25_combinado, mesesTotales)}`);
 
         if (grados_lactante.length > 0) {
             report.push('\n\nESTADIFICACIÓN ERC (AJUSTADA A EDAD < 2 AÑOS)\n');
             report = report.concat(grados_lactante);
+            htmlEstadificacion = `<h4 style="color: #0891b2; margin-bottom: 8px; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px; margin-top: 20px;">Estadificación ERC (Ajustada a < 2 años)</h4><ul style="margin-top: 0; padding-left: 20px;">`;
+            grados_lactante.forEach(g => {
+                let part = g.replace('- ', '').split(': ');
+                htmlEstadificacion += `<li style="margin-bottom: 4px;"><strong>${part[0]}:</strong> ${part.slice(1).join(': ')}</li>`;
+            });
+            htmlEstadificacion += `</ul>`;
         }
     }
     
-    if (window.valoresFueraRango && window.valoresFueraRango.length > 0) {
+    let htmlFueraRango = "";
+    if (AppState.valoresFueraRango && AppState.valoresFueraRango.length > 0) {
         report.push('\n\nVALORES FUERA DE RANGO\n');
-        let fueraRangoEditado = window.valoresFueraRango.map(v => `-${v}`);
+        let fueraRangoEditado = AppState.valoresFueraRango.map(v => `-${v}`);
         fueraRangoEditado.forEach(v => report.push(v));
+
+        htmlFueraRango = `<h4 style="color: #dc2626; margin-bottom: 8px; border-bottom: 1px solid #fca5a5; padding-bottom: 4px; margin-top: 20px;">⚠️ Valores fuera de rango</h4><ul style="margin-top: 0; padding-left: 20px; color: #dc2626;">`;
+        AppState.valoresFueraRango.forEach(v => {
+            let part = v.split(':');
+            htmlFueraRango += `<li style="margin-bottom: 4px;"><strong>${part[0]}:</strong> ${part.slice(1).join(':')}</li>`;
+        });
+        htmlFueraRango += `</ul>`;
     }
 
-    const reportTextReady = report.join('\n');
+    AppState.reportPlainText = report.join('\n');
+
+    const boldify = (str) => {
+        let split = str.split(': ');
+        return split.length > 1 ? `<strong>${split[0]}:</strong> ${split.slice(1).join(': ')}` : str;
+    };
+
+    let html = `<div style="font-family: Arial, sans-serif; font-size: 13px; line-height: 1.6; color: #1e293b; background-color: #ffffff; padding: 8px;">`;
+    if (hayDatosAnalitica) {
+        html += `<h4 style="color: #0891b2; margin-bottom: 8px; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px;">1) Analítica</h4>`;
+        html += `<ul style="margin-top: 0; margin-bottom: 15px; padding-left: 20px;">`;
+        if (hidrosalino.length > 0) html += `<li style="margin-bottom: 4px;"><strong><u>Hidrosalino:</u></strong> ${hidrosalino.map(boldify).join(' | ')}</li>`;
+        if (fosfocalcico.length > 0) html += `<li style="margin-bottom: 4px;"><strong><u>Metabolismo fosfocálcico:</u></strong> ${fosfocalcico.map(boldify).join(' | ')}</li>`;
+        if (hematologico.length > 0) html += `<li style="margin-bottom: 4px;"><strong><u>Hematológico:</u></strong> ${hematologico.map(boldify).join(' | ')}</li>`;
+        if (gasometria.length > 0) html += `<li style="margin-bottom: 4px;"><strong><u>Gasometría:</u></strong> ${gasometria.map(boldify).join(' | ')}</li>`;
+        if (orina.length > 0) html += `<li style="margin-bottom: 4px;"><strong><u>Orina puntual:</u></strong> ${orina.map(boldify).join(' | ')}</li>`;
+        if (cocientes.length > 0) html += `<li style="margin-bottom: 4px;"><strong><u>Cocientes urinarios:</u></strong> ${cocientes.map(boldify).join(' | ')}</li>`;
+        if (orina24h.length > 0) html += `<li style="margin-bottom: 4px;"><strong><u>Orina de 24h:</u></strong> ${orina24h.map(boldify).join(' | ')}</li>`;
+        if (comentarioNutricional) html += `<li style="margin-bottom: 4px;"><strong><u>Otros:</u></strong> ${comentarioNutricional}</li>`;
+        html += `</ul>`;
+    }
+    if (AppState.ecografiaReportText) {
+        html += `<h4 style="color: #0891b2; margin-bottom: 8px; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px;">2) Ecografía Renal</h4>`;
+        html += `<p style="margin-top: 0; padding-left: 20px;">${AppState.ecografiaReportText.replace('-Longitud renal ecográfica: ', '<strong>Longitud renal ecográfica:</strong> ')}</p>`;
+    }
+    html += htmlEstadificacion;
+    html += htmlFueraRango;
+    html += `</div>`;
+
     const reportContentDiv = document.getElementById('reportContent');
-    
-    reportContentDiv.innerHTML = ''; 
-    const preElement = document.createElement('pre');
-    preElement.style.fontFamily = "'Rubik', sans-serif";
-    preElement.style.fontSize = "14px";
-    preElement.style.lineHeight = "2.0";
-    preElement.style.whiteSpace = "pre-wrap";
-    
-    preElement.textContent = reportTextReady; 
-    
-    reportContentDiv.appendChild(preElement);
+    reportContentDiv.innerHTML = html;
 
     document.getElementById('reportSection').classList.remove('hidden');
-        // Hacemos el scroll hacia el contenedor principal de resultados, no al informe final
     setTimeout(() => { document.getElementById('results').scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 100);
-    
 }
 
 // ===============================================
-// 7. FUNCIONES DE EXPORTACIÓN
+// 7. FUNCIONES DE EXPORTACIÓN Y COPIADO genera HTML estructurado del informe
+// Usada por exportToWord, printReport (y podría usarse en PDF)
 // ===============================================
+
+function buildReportHTML() {
+    const R     = AppState.calculatedResults;
+    const edad  = AppState.edadEnAños  || 0;
+    const edadM = AppState.edadEnMeses || 0;
+    const get   = id => document.getElementById(id)?.value || '—';
+    const sexoStr = get('sexo') === 'M' ? 'Masculino' : 'Femenino';
+
+    const labels = {
+        superficiecorporal:'Superficie Corporal', imc:'IMC',
+        vpercent:'V% creatinina enz/orina',
+        schwartzneo:'Schwartz neonatal', schwartzlact:'Schwartz lactante',
+        schwartzbedside:'Schwartz Bedside', bokenkamp:'Bökenkamp',
+        ekfccr:'EKFC Cr', ekfccistc:'EKFC CistC',
+        ckidu25cr:'CKiD U25 Cr', ckidu25cistc:'CKiD U25 CistC',
+        ckidu25combinado:'CKiD U25 Combinado',
+        efna:'EF Na', efk:'EF K', efcl:'EF Cl', efau:'EF AU',
+        cacr:'Ca/Cr', mgcr:'Mg/Cr', pcr:'P/Cr', aucr:'AU/Cr',
+        albcr:'Alb/Cr', protcr:'Prot/Cr', citratocr:'Citrato/Cr',
+        oxalatocr:'Oxalato/Cr', nak:'Na/K orina', cacitrato:'Ca/Citrato', rtp:'RTP',
+        uricosuria:'Uricosuria', calciuria:'Calciuria', citraturia:'Citraturia',
+        fosfaturia:'Fosfaturia', magnesuria:'Magnesuria', oxaluria:'Oxaluria',
+        albuminuria:'Albuminuria', proteinuria:'Proteinuria',
+        proteinuriaestimada:'Proteinuria estimada'
+    };
+    const units = {
+        superficiecorporal:'m2', imc:'kg/m2', vpercent:'%',
+        schwartzneo:'ml/min/1.73m2', schwartzlact:'ml/min/1.73m2',
+        schwartzbedside:'ml/min/1.73m2', bokenkamp:'ml/min/1.73m2',
+        ekfccr:'ml/min/1.73m2', ekfccistc:'ml/min/1.73m2',
+        ckidu25cr:'ml/min/1.73m2', ckidu25cistc:'ml/min/1.73m2',
+        ckidu25combinado:'ml/min/1.73m2',
+        efna:'%', efk:'%', efcl:'%', efau:'%',
+        cacr:'mg/mg', mgcr:'mg/mg', pcr:'mg/mg', aucr:'mg/mg',
+        albcr:'mg/g', protcr:'mg/g', citratocr:'mg/mg', oxalatocr:'mg/mg',
+        nak:'', cacitrato:'', rtp:'%',
+        uricosuria:'mg/1.73m2/dia', calciuria:'mg/kg/dia', citraturia:'mg/kg/dia',
+        fosfaturia:'mg/kg/dia', magnesuria:'mg/kg/dia', oxaluria:'mg/1.73m2/dia',
+        albuminuria:'mg/1.73m2/dia', proteinuria:'mg/m2/dia',
+        proteinuriaestimada:'mg/m2/dia'
+    };
+    const secciones = [
+        { titulo:'DATOS GENERALES',
+          keys:['superficiecorporal','imc'] },
+        { titulo:'FILTRADO GLOMERULAR — eGFR (ml/min/1.73m2)',
+          keys:['vpercent','schwartzneo','schwartzlact','schwartzbedside','bokenkamp',
+                'ckidu25cr','ekfccr','ckidu25cistc','ekfccistc','ckidu25combinado'] },
+        { titulo:'EXCRECIÓN FRACCIONAL',
+          keys:['efna','efk','efcl','efau'] },
+        { titulo:'ÍNDICES URINARIOS — ORINA PUNTUAL',
+          keys:['cacr','mgcr','pcr','aucr','albcr','protcr',
+                'citratocr','oxalatocr','nak','cacitrato','rtp'] },
+        { titulo:'EXCRECIÓN EN 24 HORAS',
+          keys:['uricosuria','calciuria','citraturia','fosfaturia',
+                'magnesuria','oxaluria','albuminuria','proteinuria','proteinuriaestimada'] }
+    ];
+
+    let html = '';
+
+    // ── Cabecera ──────────────────────────────────────
+    html += `
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:14px;">
+      <tr>
+        <td style="background:#0891b2;padding:12px 16px;">
+          <span style="color:#fff;font-size:17px;font-weight:bold;font-family:Arial,sans-serif;">NefroPed</span>
+          <span style="color:#e0f7fa;font-size:11px;font-family:Arial,sans-serif;margin-left:10px;">Informe de Pruebas Complementarias Pediátricas</span>
+        </td>
+        <td style="background:#0891b2;padding:12px 16px;text-align:right;white-space:nowrap;">
+          <span style="color:#fff;font-size:11px;font-family:Arial,sans-serif;">${new Date().toLocaleDateString('es-ES')}</span>
+        </td>
+      </tr>
+    </table>`;
+
+    // ── Datos paciente ────────────────────────────────
+    html += `
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:14px;border-collapse:collapse;">
+      <tr>
+        <td style="background:#f1f5f9;border-left:4px solid #0891b2;padding:10px 14px;">
+          <div style="font-size:10px;font-weight:bold;color:#0891b2;font-family:Arial,sans-serif;margin-bottom:5px;letter-spacing:0.5px;">DATOS DEL PACIENTE</div>
+          <div style="font-size:12px;color:#1e293b;font-family:Arial,sans-serif;margin-bottom:3px;">
+            <b>F. Nacimiento:</b> ${get('fecha_nacimiento')} &nbsp;&nbsp;
+            <b>F. Analítica:</b> ${get('fecha_analitica')} &nbsp;&nbsp;
+            <b>Edad:</b> ${edad} años ${edadM} meses
+          </div>
+          <div style="font-size:12px;color:#1e293b;font-family:Arial,sans-serif;">
+            <b>Sexo:</b> ${sexoStr} &nbsp;&nbsp;
+            <b>Peso:</b> ${get('peso_kg')} kg &nbsp;&nbsp;
+            <b>Talla:</b> ${get('talla_cm')} cm
+          </div>
+        </td>
+      </tr>
+    </table>`;
+
+    // ── Secciones de resultados ───────────────────────
+    secciones.forEach(sec => {
+        const filas = sec.keys.filter(k => R[k] && R[k] !== 0 && !isNaN(R[k]));
+        if (!filas.length) return;
+
+        html += `
+        <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:12px;border-collapse:collapse;">
+          <tr>
+            <td colspan="3" style="background:#0891b2;padding:6px 10px;">
+              <span style="color:#fff;font-size:11px;font-weight:bold;font-family:Arial,sans-serif;">${sec.titulo}</span>
+            </td>
+          </tr>
+          <tr style="background:#e2e8f0;">
+            <td style="padding:4px 10px;font-size:10px;font-weight:bold;color:#64748b;font-family:Arial,sans-serif;width:50%;">PARÁMETRO</td>
+            <td style="padding:4px 10px;font-size:10px;font-weight:bold;color:#64748b;font-family:Arial,sans-serif;width:25%;">VALOR</td>
+            <td style="padding:4px 10px;font-size:10px;font-weight:bold;color:#64748b;font-family:Arial,sans-serif;width:25%;">RANGO NORMAL</td>
+          </tr>`;
+
+        filas.forEach((key, i) => {
+            const val = R[key];
+            const ev  = (key !== 'superficiecorporal' && key !== 'imc')
+                        ? evaluarRango(key, val, edad, edadM)
+                        : { enRango: true, rangoTexto: '' };
+
+            let valorTexto = parseFloat(val).toFixed(2);
+            if (units[key]) valorTexto += ' ' + units[key];
+
+            const bg    = i % 2 === 0 ? '#ffffff' : '#f8fafc';
+            const color = ev.enRango ? '#0891b2' : '#dc2626';
+
+            html += `
+          <tr style="background:${bg};">
+            <td style="padding:5px 10px;font-size:12px;color:#1e293b;font-family:Arial,sans-serif;border-bottom:1px solid #e2e8f0;">${labels[key]||key}</td>
+            <td style="padding:5px 10px;font-size:12px;font-weight:bold;color:${color};font-family:Arial,sans-serif;border-bottom:1px solid #e2e8f0;">${valorTexto}</td>
+            <td style="padding:5px 10px;font-size:11px;color:#64748b;font-family:Arial,sans-serif;border-bottom:1px solid #e2e8f0;">${ev.rangoTexto||'—'}</td>
+          </tr>`;
+        });
+
+        html += `</table>`;
+    });
+
+    // ── Bloques de texto libre ────────────────────────
+    const bloques = [
+        { titulo:'SEDIMENTO URINARIO',     texto: get('sedimento_urinario') },
+        { titulo:'OTROS',                  texto: get('comentarionutricional') },
+        { titulo:'ECOGRAFÍA RENAL',        texto: AppState.ecografiaReportText }
+    ];
+    bloques.forEach(({ titulo, texto }) => {
+        if (!texto || texto === '—') return;
+        html += `
+        <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:12px;border-collapse:collapse;">
+          <tr>
+            <td style="background:#0891b2;padding:6px 10px;">
+              <span style="color:#fff;font-size:11px;font-weight:bold;font-family:Arial,sans-serif;">${titulo}</span>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:10px 12px;font-size:12px;color:#1e293b;font-family:Arial,sans-serif;line-height:1.6;border:1px solid #e2e8f0;border-top:none;">${texto}</td>
+          </tr>
+        </table>`;
+    });
+
+    // ── Alertas fuera de rango ────────────────────────
+    if (AppState.valoresFueraRango?.length > 0) {
+        const items = AppState.valoresFueraRango
+            .map(v => `<li style="margin-bottom:3px;">${v}</li>`).join('');
+        html += `
+        <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:12px;border-collapse:collapse;">
+          <tr>
+            <td style="background:#fee2e2;border:2px solid #dc2626;padding:12px 16px;">
+              <div style="font-size:12px;font-weight:bold;color:#dc2626;font-family:Arial,sans-serif;margin-bottom:6px;">VALORES FUERA DE RANGO</div>
+              <ul style="margin:0;padding-left:18px;font-size:11px;color:#1e293b;font-family:Arial,sans-serif;">${items}</ul>
+            </td>
+          </tr>
+        </table>`;
+    }
+
+    // ── Pie ───────────────────────────────────────────
+    html += `
+    <div style="margin-top:16px;padding-top:8px;border-top:1px solid #e2e8f0;font-size:10px;color:#64748b;font-family:Arial,sans-serif;text-align:center;">
+        NefroPed — Calculadora de Función Renal Pediátrica
+    </div>`;
+
+    return html;
+}
+
+// ══════════════════════════════════════════════════════
+// EXPORTAR A WORD
+// ══════════════════════════════════════════════════════
 function exportToWord() {
-    const reportContent = document.getElementById('reportContent');
-    const reportText = reportContent ? reportContent.innerText : '';
-    if (!reportText.trim()) return Swal.fire({ icon: 'warning', title: 'Sin informe', text: 'Calcule primero los resultados.'});
-    
+    if (!AppState.calculatedResults || Object.keys(AppState.calculatedResults).length === 0) {
+        return Swal.fire({ icon: 'warning', title: 'Sin informe', text: 'Calcule primero los resultados.' });
+    }
     try {
-        const header = '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word"><head><meta charset="utf-8"><title>Informe</title></head><body>';
-        const formattedText = reportText.replace(/\n/g, '<br>');
-        const sourceHTML = header + '<h2>Informe Clínico Renal</h2><pre style="font-family: Arial; font-size: 12px; line-height: 1.8;">' + formattedText + '</pre></body></html>';
-        
-        const blob = new Blob(['\ufeff', sourceHTML], { type: 'application/msword' });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a'); link.href = url; link.download = 'informe-clinico-renal.doc';
+        const body = buildReportHTML();
+        const fullHTML = `<html xmlns:o="urn:schemas-microsoft-com:office:office"
+            xmlns:w="urn:schemas-microsoft-com:office:word"
+            xmlns="http://www.w3.org/TR/REC-html40">
+            <head>
+                <meta charset="utf-8">
+                <title>Informe NefroPed</title>
+                <style>
+                    @page { mso-page-orientation: portrait; margin: 20mm; }
+                    body { font-family: Arial, sans-serif; margin: 0; padding: 0; }
+                    table { border-collapse: collapse; }
+                </style>
+            </head>
+            <body>${body}</body>
+        </html>`;
+        const blob = new Blob(['\ufeff', fullHTML], { type: 'application/msword' });
+        const url  = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url; link.download = 'informe-nefroped.doc';
         link.click(); URL.revokeObjectURL(url);
-        Swal.fire({ icon: 'success', title: 'Word descargado', timer: 1500, showConfirmButton: false });
-    } catch (e) { Swal.fire({ icon: 'error', title: 'Error', text: 'Error exportando.' }); }
+        Swal.fire({ icon: 'success', title: 'Word descargado', timer: 2000, showConfirmButton: false });
+    } catch(e) {
+        Swal.fire({ icon: 'error', title: 'Error', text: 'Error exportando.' });
+    }
 }
 
 function exportToPDF() {
-    const reportContent = document.getElementById('reportContent');
-    const reportText = reportContent ? reportContent.innerText : '';
-    if (!reportText.trim()) return Swal.fire({ icon: 'warning', title: 'Sin informe', text: 'Calcule primero los resultados.'});
-    
-    try {
-        const { jsPDF } = window.jspdf; const doc = new jsPDF();
-        doc.setFontSize(14); doc.text('Informe Clínico Renal', 20, 20);
-        doc.setFontSize(10); const lines = doc.splitTextToSize(reportText, 170); doc.text(lines, 20, 35);
-        doc.save('informe-clinico-renal.pdf');
-        Swal.fire({ icon: 'success', title: 'PDF descargado', timer: 1500, showConfirmButton: false });
-    } catch (e) { Swal.fire({ icon: 'error', title: 'Error', text: 'Error exportando.' }); }
+    if (!AppState.calculatedResults || Object.keys(AppState.calculatedResults).length === 0) {
+        return Swal.fire({ icon: 'warning', title: 'Sin informe', text: 'Calcule primero los resultados.' });
+    }
+
+    Swal.fire({ title: 'Generando PDF...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+
+    setTimeout(() => {
+        try {
+            const { jsPDF } = window.jspdf;
+            const doc  = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
+            const R    = AppState.calculatedResults;
+            const edad = AppState.edadEnAños || 0;
+            const edadM = AppState.edadEnMeses || 0;
+
+            // ── Paleta ──
+            const TEAL  = [8,145,178], RED   = [220,38,38],
+                  DARK  = [30,41,59],  GREY  = [100,116,139],
+                  LGREY = [226,232,240], WHITE = [255,255,255];
+
+            const margin = 14, pageW = 210, pageH = 297;
+            const maxW = pageW - margin * 2;
+            let y = 0;
+
+            const newPage = () => { doc.addPage(); y = margin; };
+            const check   = (h = 7) => { if (y + h > pageH - 12) newPage(); };
+
+            // ══ CABECERA ══════════════════════════════════
+            doc.setFillColor(...TEAL);
+            doc.rect(0, 0, pageW, 20, 'F');
+            doc.setTextColor(...WHITE);
+            doc.setFont('helvetica','bold'); doc.setFontSize(15);
+            doc.text('NefroPed', margin, 13);
+            doc.setFont('helvetica','normal'); doc.setFontSize(9.5);
+            doc.text('Informe de Pruebas Complementarias Pediátricas', margin + 36, 13);
+            doc.setFontSize(8);
+            doc.text(new Date().toLocaleDateString('es-ES'), pageW - margin, 13, { align:'right' });
+            y = 26;
+
+            // ══ DATOS DEL PACIENTE ═════════════════════════
+            const get = id => document.getElementById(id)?.value || '—';
+            const sexoStr = get('sexo') === 'M' ? 'Masculino' : 'Femenino';
+
+            doc.setFillColor(241,245,249);
+            doc.roundedRect(margin, y, maxW, 20, 2, 2, 'F');
+            doc.setFont('helvetica','bold'); doc.setFontSize(7.5); doc.setTextColor(...TEAL);
+            doc.text('DATOS DEL PACIENTE', margin+3, y+5.5);
+            doc.setFont('helvetica','normal'); doc.setFontSize(8.5); doc.setTextColor(...DARK);
+            doc.text(
+                `F. Nacimiento: ${get('fecha_nacimiento')}   F. Analítica: ${get('fecha_analitica')}   Edad: ${edad} años ${edadM} meses`,
+                margin+3, y+12
+            );
+            doc.text(
+                `Sexo: ${sexoStr}   Peso: ${get('peso_kg')} kg   Talla: ${get('talla_cm')} cm`,
+                margin+3, y+18
+            );
+            y += 25;
+
+            // ══ DEFINICIÓN DE SECCIONES ═══════════════════
+            const labels = {
+                superficiecorporal:'Superficie Corporal', imc:'IMC',
+                vpercent:'V% creatinina enz/orina',
+                schwartzneo:'Schwartz neonatal', schwartzlact:'Schwartz lactante',
+                schwartzbedside:'Schwartz Bedside', bokenkamp:'Bökenkamp',
+                ekfccr:'EKFC Cr', ekfccistc:'EKFC CistC',
+                ckidu25cr:'CKiD U25 Cr', ckidu25cistc:'CKiD U25 CistC',
+                ckidu25combinado:'CKiD U25 Combinado',
+                efna:'EF Na', efk:'EF K', efcl:'EF Cl', efau:'EF AU',
+                cacr:'Ca/Cr', mgcr:'Mg/Cr', pcr:'P/Cr', aucr:'AU/Cr',
+                albcr:'Alb/Cr', protcr:'Prot/Cr', citratocr:'Citrato/Cr',
+                oxalatocr:'Oxalato/Cr', nak:'Na/K orina', cacitrato:'Ca/Citrato', rtp:'RTP',
+                uricosuria:'Uricosuria', calciuria:'Calciuria', citraturia:'Citraturia',
+                fosfaturia:'Fosfaturia', magnesuria:'Magnesuria', oxaluria:'Oxaluria',
+                albuminuria:'Albuminuria', proteinuria:'Proteinuria',
+                proteinuriaestimada:'Proteinuria estimada'
+            };
+            const units = {
+                superficiecorporal:'m2', imc:'kg/m2', vpercent:'%',
+                schwartzneo:'ml/min/1.73m2', schwartzlact:'ml/min/1.73m2',
+                schwartzbedside:'ml/min/1.73m2', bokenkamp:'ml/min/1.73m2',
+                ekfccr:'ml/min/1.73m2', ekfccistc:'ml/min/1.73m2',
+                ckidu25cr:'ml/min/1.73m2', ckidu25cistc:'ml/min/1.73m2',
+                ckidu25combinado:'ml/min/1.73m2',
+                efna:'%', efk:'%', efcl:'%', efau:'%',
+                cacr:'mg/mg', mgcr:'mg/mg', pcr:'mg/mg', aucr:'mg/mg',
+                albcr:'mg/g', protcr:'mg/g', citratocr:'mg/mg', oxalatocr:'mg/mg',
+                nak:'', cacitrato:'', rtp:'%',
+                uricosuria:'mg/1.73m2/dia', calciuria:'mg/kg/dia', citraturia:'mg/kg/dia',
+                fosfaturia:'mg/kg/dia', magnesuria:'mg/kg/dia', oxaluria:'mg/1.73m2/dia',
+                albuminuria:'mg/1.73m2/dia', proteinuria:'mg/m2/dia',
+                proteinuriaestimada:'mg/m2/dia'
+            };
+            const secciones = [
+                { titulo:'DATOS GENERALES',
+                  keys:['superficiecorporal','imc'] },
+                { titulo:'FILTRADO GLOMERULAR — eGFR (ml/min/1.73m2)',
+                  keys:['vpercent','schwartzneo','schwartzlact','schwartzbedside','bokenkamp',
+                        'ckidu25cr','ekfccr','ckidu25cistc','ekfccistc','ckidu25combinado'] },
+                { titulo:'EXCRECIÓN FRACCIONAL',
+                  keys:['efna','efk','efcl','efau'] },
+                { titulo:'ÍNDICES URINARIOS — ORINA PUNTUAL',
+                  keys:['cacr','mgcr','pcr','aucr','albcr','protcr',
+                        'citratocr','oxalatocr','nak','cacitrato','rtp'] },
+                { titulo:'EXCRECIÓN EN 24 HORAS',
+                  keys:['uricosuria','calciuria','citraturia','fosfaturia',
+                        'magnesuria','oxaluria','albuminuria','proteinuria','proteinuriaestimada'] }
+            ];
+
+            // ══ FILAS DE RESULTADOS ════════════════════════
+            const COL_VAL  = margin + 95;
+            const COL_RANG = margin + 135;
+            let alt = false;
+
+            secciones.forEach(sec => {
+                const filas = sec.keys.filter(k => R[k] && R[k] !== 0 && !isNaN(R[k]));
+                if (!filas.length) return;
+
+                check(10 + filas.length * 7);
+
+                // Título sección
+                doc.setFillColor(...TEAL);
+                doc.rect(margin, y, maxW, 7, 'F');
+                doc.setFont('helvetica','bold'); doc.setFontSize(8);
+                doc.setTextColor(...WHITE);
+                doc.text(sec.titulo, margin+3, y+5);
+                y += 7;
+
+                // Cabecera columnas
+                doc.setFillColor(...LGREY);
+                doc.rect(margin, y, maxW, 5.5, 'F');
+                doc.setFont('helvetica','bold'); doc.setFontSize(7);
+                doc.setTextColor(...GREY);
+                doc.text('PARÁMETRO', margin+3, y+4);
+                doc.text('VALOR', COL_VAL, y+4);
+                doc.text('RANGO NORMAL', COL_RANG, y+4);
+                y += 5.5;
+
+                alt = false;
+                filas.forEach(key => {
+                    check(7);
+                    const val  = R[key];
+                    const ev   = (key!=='superficiecorporal' && key!=='imc')
+                                  ? evaluarRango(key, val, edad, edadM)
+                                  : { enRango:true, rangoTexto:'' };
+                    // Construir valorTexto sin caracteres Unicode problemáticos
+                    let valorTexto = parseFloat(val).toFixed(2);
+                    if (units[key]) valorTexto += ' ' + units[key];
+                    // Sin ▲▼: el color rojo ya indica fuera de rango
+
+                    const rangStr = ev.rangoTexto || '—';
+
+                    if (alt) { doc.setFillColor(248,250,252); doc.rect(margin,y,maxW,6.5,'F'); }
+                    alt = !alt;
+
+                    // Nombre
+                    doc.setFont('helvetica','normal'); doc.setFontSize(8.5);
+                    doc.setTextColor(...DARK);
+                    doc.text(labels[key]||key, margin+3, y+4.5);
+
+                    // Valor (✅ ahora en un solo bloque de texto)
+                    doc.setFont('helvetica','bold');
+                    if (ev.enRango) {
+                        doc.setTextColor(...TEAL);
+                    } else {
+                        doc.setTextColor(...RED);
+                    }
+                    doc.text(valorTexto, COL_VAL, y+4.5);
+
+                    // Rango
+                    doc.setFont('helvetica','normal'); doc.setFontSize(7.5);
+                    doc.setTextColor(...GREY);
+                    doc.text(rangStr, COL_RANG, y+4.5);
+
+                    // Separador
+                    doc.setDrawColor(...LGREY); doc.setLineWidth(0.1);
+                    doc.line(margin, y+6.5, pageW-margin, y+6.5);
+                    y += 6.5;
+                });
+                y += 4;
+            });
+
+            // ══ BLOQUE DE TEXTO LIBRE ══════════════════════
+            const bloques = [
+                { titulo:'SEDIMENTO URINARIO',     texto: get('sedimento_urinario') },
+                { titulo:'OTROS',                  texto: get('comentarionutricional') },
+                { titulo:'ECOGRAFÍA RENAL',        texto: AppState.ecografiaReportText }
+            ];
+            bloques.forEach(({ titulo, texto }) => {
+                if (!texto || texto === '—') return;
+                check(18);
+                doc.setFillColor(...TEAL);
+                doc.rect(margin, y, maxW, 7, 'F');
+                doc.setFont('helvetica','bold'); doc.setFontSize(8);
+                doc.setTextColor(...WHITE);
+                doc.text(titulo, margin+3, y+5);
+                y += 13; // ← antes era 9, insuficiente para la línea base tipográfica
+                doc.setFont('helvetica','normal'); doc.setFontSize(8.5);
+                doc.setTextColor(...DARK);
+                const lineas = doc.splitTextToSize(texto, maxW-4);
+                lineas.forEach(l => {
+                    check(6);
+                    doc.text(l, margin+2, y);
+                    y += 5.5;
+                });
+                y += 3;
+         });
+            // ══ RESUMEN ALERTAS ════════════════════════════
+            if (AppState.valoresFueraRango?.length > 0) {
+                const bH = 10 + AppState.valoresFueraRango.length * 5.5;
+                check(bH);
+                doc.setFillColor(254,242,242);
+                doc.roundedRect(margin, y, maxW, bH, 2, 2, 'F');
+                doc.setDrawColor(...RED); doc.setLineWidth(0.4);
+                doc.roundedRect(margin, y, maxW, bH, 2, 2, 'S');
+                doc.setFont('helvetica','bold'); doc.setFontSize(8.5);
+                doc.setTextColor(...RED);
+                doc.text('⚠  VALORES FUERA DE RANGO', margin+4, y+6.5);
+                y += 10;
+                doc.setFont('helvetica','normal'); doc.setFontSize(8);
+                AppState.valoresFueraRango.forEach(v => {
+                    doc.text('• '+v, margin+6, y); y += 5.5;
+                });
+            }
+
+            // ══ PIE DE PÁGINA ══════════════════════════════
+            const total = doc.internal.getNumberOfPages();
+            for (let i = 1; i <= total; i++) {
+                doc.setPage(i);
+                doc.setDrawColor(...LGREY); doc.setLineWidth(0.3);
+                doc.line(margin, pageH-10, pageW-margin, pageH-10);
+                doc.setFont('helvetica','normal'); doc.setFontSize(7.5);
+                doc.setTextColor(...GREY);
+                doc.text('NefroPed — Calculadora de Función Renal Pediátrica', margin, pageH-6);
+                doc.text(`Página ${i} de ${total}`, pageW-margin, pageH-6, { align:'right' });
+            }
+
+            doc.save('informe-nefroped.pdf');
+            Swal.fire({ icon:'success', title:'¡PDF descargado!', timer:1500, showConfirmButton:false });
+
+        } catch(e) {
+            console.error(e);
+            Swal.fire({ icon:'error', title:'Error', text:'No se pudo generar el PDF: '+e.message });
+        }
+    }, 100);
 }
 
 function printReport() {
-    const reportContent = document.getElementById('reportContent');
-    const reportText = reportContent ? reportContent.innerText : '';
-    if (!reportText.trim()) return Swal.fire({ icon: 'warning', title: 'Sin informe', text: 'Calcule primero los resultados.'});
-    
-    const printWindow = window.open('', '_blank');
-    printWindow.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Informe Clínico Renal</title><style>body { font-family: 'Rubik', Arial, sans-serif; padding: 30px; } pre { font-family: 'Rubik', Arial, sans-serif; font-size: 13px; line-height: 2.0; white-space: pre-wrap; }</style></head><body><h2>Informe Clínico Renal</h2><pre>${reportText}</pre></body></html>`);
-    printWindow.document.close(); printWindow.focus();
-    setTimeout(() => printWindow.print(), 250);
+    if (!AppState.calculatedResults || Object.keys(AppState.calculatedResults).length === 0) {
+        return Swal.fire({ icon: 'warning', title: 'Sin informe', text: 'Calcule primero los resultados.' });
+    }
+    const body = buildReportHTML();
+    const pw = window.open('', '_blank');
+    pw.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8">
+        <title>NefroPed — Informe</title>
+        <style>
+            @page { margin: 15mm; }
+            body { margin: 0; padding: 0; font-family: Arial, sans-serif; }
+            table { border-collapse: collapse; }
+            @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+        </style>
+    </head><body>${body}</body></html>`);
+    pw.document.close();
+    pw.focus();
+    setTimeout(() => pw.print(), 400);
 }
 function copyToClipboard() {
-    const reportContent = document.getElementById('reportContent');
-    const reportText = reportContent ? reportContent.innerText : '';
-    
-    if (!reportText.trim()) {
+    // A la hora de copiar, NO copiamos la pantalla, copiamos la variable secreta en Texto Plano
+    if (!AppState.reportPlainText) {
         return Swal.fire({ icon: 'warning', title: 'Sin informe', text: 'Calcule primero los resultados.'});
     }
     
-    navigator.clipboard.writeText(reportText).then(() => {
+    navigator.clipboard.writeText(AppState.reportPlainText).then(() => {
         Swal.fire({
-            icon: 'success',
-            title: '¡Copiado!',
-            text: 'El informe médico está listo para pegar (Ctrl+V) en la Historia Clínica.',
-            timer: 2500,
-            showConfirmButton: false,
-            backdrop: `rgba(33, 128, 141, 0.2)`
+            icon: 'success', title: '¡Texto copiado!', text: 'Formato texto plano listo para pegar en la Historia Clínica (Ctrl+V).',
+            timer: 2000, showConfirmButton: false
         });
     }).catch(err => {
-        console.error('Error al copiar: ', err);
-        Swal.fire({ icon: 'error', title: 'Error', text: 'No se pudo copiar el texto automáticamente. Por favor, selecciónelo a mano.' });
+        Swal.fire({ icon: 'error', title: 'Error', text: 'No se pudo copiar automáticamente.' });
     });
 }
 // ===============================================
@@ -1374,63 +1920,43 @@ function inyectarUnidadesEnInputs() {
 
         for (let i = 0; i < label.childNodes.length; i++) {
             const node = label.childNodes[i];
-            
-            if (node.nodeType === 3) { 
-                const match = node.nodeValue.match(/\((.*?)\)/);
-                
+            if (node.nodeType === 3) {
+                const match = node.nodeValue.match(/\((.+?)\)\s*$/);
                 if (match) {
                     const unidad = match[1].trim();
                     const inputId = label.getAttribute('for');
-                    
-                    if (inputId === 'edad_calculada') continue;
-                    
-                    const input = document.getElementById(inputId);
-                    if (input && input.tagName.toLowerCase() === 'input') {
-                        node.nodeValue = node.nodeValue.replace(/\(.*?\)/, '').trim() + ' ';
-                        
-                        const wrapper = document.createElement('div');
-                        wrapper.className = 'input-unit-wrapper'; 
-                        wrapper.style.position = 'relative';
-                        wrapper.style.width = '100%';
-                        wrapper.style.display = 'flex'; 
-                        wrapper.style.alignItems = 'center';
-                        
-                        wrapper.addEventListener('click', function(e) {
-                            input.focus();
-                        });
+                    if (!inputId || inputId === 'edad_calculada') continue;
 
-                        input.parentNode.insertBefore(wrapper, input);
-                        wrapper.appendChild(input);
-                        
-                        const paddingDerecho = (unidad.length * 9 + 20); 
-                        input.style.width = '100%';
-                        input.style.flex = '1'; 
-                        input.style.paddingRight = paddingDerecho + 'px';
-                        input.style.boxSizing = 'border-box';
-                        
-                        const unitSpan = document.createElement('span');
-                        unitSpan.textContent = unidad;
-                        unitSpan.style.position = 'absolute';
-                        unitSpan.style.right = '12px';
-                        unitSpan.style.top = '0';
-                        unitSpan.style.bottom = '0';
-                        unitSpan.style.display = 'flex';
-                        unitSpan.style.alignItems = 'center';
-                        
-                        unitSpan.style.color = 'var(--color-text-secondary)';
-                        unitSpan.style.fontSize = '12px';
-                        unitSpan.style.fontWeight = '600';
-                        unitSpan.style.pointerEvents = 'none'; 
-                        unitSpan.style.userSelect = 'none'; 
-                        
-                        wrapper.appendChild(unitSpan);
-                    }
-                    break; 
+                    const input = document.getElementById(inputId);
+                    if (!input) continue;
+
+                    // ✅ Usamos clase CSS en vez de style.*
+                    const wrapper = document.createElement('div');
+                    wrapper.className = 'input-unit-wrapper';
+                    if (unidad.length > 9) wrapper.classList.add('unit-long');
+
+                    wrapper.addEventListener('click', () => input.focus());
+                    input.parentNode.insertBefore(wrapper, input);
+                    wrapper.appendChild(input);
+
+                    // ✅ Quitamos todos los style.* del input
+                    input.style.width = '';
+                    input.style.flex = '';
+                    input.style.paddingRight = '';
+                    input.style.boxSizing = '';
+
+                    // ✅ El span de unidad también usa clase CSS
+                    const unitSpan = document.createElement('span');
+                    unitSpan.className = 'unit-label';
+                    unitSpan.textContent = unidad;
+                    wrapper.appendChild(unitSpan);
+                    break;
                 }
             }
         }
     });
 }
+
 // ==========================================
 // FUNCIÓN AUXILIAR: LIMPIEZA DE COLORES
 // ==========================================
@@ -1544,7 +2070,7 @@ function generarResultadoEcografia() {
     let valDer = parseFloat(document.getElementById('rinon_derecho_mm').value);
     let talla = parseFloat(document.getElementById('talla_cm').value);
     
-    window.ecografiaReportText = ""; 
+    AppState.ecografiaReportText = ""; 
 
     if (isNaN(valIzq) && isNaN(valDer)) return "";
 
@@ -1556,7 +2082,7 @@ function generarResultadoEcografia() {
         let radioUnico = document.querySelector('input[name="radio_rinon_unico"]:checked');
         let rinonUnicoTipo = radioUnico ? radioUnico.value : 'izquierdo';
         let medido = (rinonUnicoTipo === 'izquierdo') ? valIzq : valDer;
-        let edadDec = window.edadEnAños; 
+        let edadDec = AppState.edadEnAños; 
         
         if (!isNaN(medido) && typeof edadDec === 'number') {
             let mediaEsperadaMm = Math.round(((0.4 * edadDec) + 7) * 10);
@@ -1570,7 +2096,7 @@ function generarResultadoEcografia() {
             let txtInforme = `-Longitud renal ecográfica: Riñón ${rinonUnicoTipo} ${medido}mm (${comparador} la media esperada de hipertrofia compensadora, fórmula Krill).`;
             
             htmlOut += `<div style="color: var(--color-primary); font-weight: bold;">${txtPantalla}</div>`;
-            window.ecografiaReportText = txtInforme; 
+            AppState.ecografiaReportText = txtInforme; 
         } else {
             htmlOut += `<span style="color: var(--color-text-secondary); font-size: 13px;">Introduzca la fecha de nacimiento y la medida del riñón para calcular.</span>`;
         }
@@ -1603,7 +2129,7 @@ function generarResultadoEcografia() {
             htmlOut += calcularP(valIzq, "izquierdo");
             htmlOut += calcularP(valDer, "derecho");
             
-            window.ecografiaReportText = `-Longitud renal ecográfica: ${lineasReporte.join("; ")}`; 
+            AppState.ecografiaReportText = `-Longitud renal ecográfica: ${lineasReporte.join("; ")}`; 
         }
     }
 
