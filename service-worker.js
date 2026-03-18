@@ -1,4 +1,4 @@
-const CACHE_NAME = 'nefroped-v33'; // <--- ACUÉRDATE DE CAMBIAR ESTO AL SUBIR
+const CACHE_NAME = 'nefroped-v34'; // <--- ACUÉRDATE DE CAMBIAR ESTO AL SUBIR
 
 
 const urlsToCache = [
@@ -10,8 +10,21 @@ const urlsToCache = [
   './jspdf.js',
   './filesaver.js',
   './purify.js',
-  'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css',
-  'https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&display=swap'
+  
+  // Archivos de la tipografía Geist
+  './fonts/geist-v1-latin-regular.woff2',
+  './fonts/geist-v1-latin-500.woff2',
+  './fonts/geist-v1-latin-600.woff2',
+  './fonts/geist-v1-latin-700.woff2',
+  
+  // Archivos de FontAwesome
+  './fontawesome/css/all.min.css',
+  './fontawesome/webfonts/fa-solid-900.woff2',
+  './fontawesome/webfonts/fa-solid-900.ttf',
+  './fontawesome/webfonts/fa-regular-400.woff2',
+  './fontawesome/webfonts/fa-regular-400.ttf',
+  './fontawesome/webfonts/v4-compatibility.woff2',
+  './fontawesome/webfonts/v4-compatibility.ttf'
 ];
 
 // ── INSTALL ───────────────────────────────────────────────────────────────────

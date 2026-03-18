@@ -1,7 +1,33 @@
 /* ==========================================================================
    NEFROPED - HOJA DE ESTILOS PRINCIPAL
    ========================================================================== */
-
+/* ==========================================================================
+   TIPOGRAFÍA LOCAL (GEIST)
+   ========================================================================== */
+@font-face {
+  font-family: 'Geist';
+  font-style: normal;
+  font-weight: 400;
+  src: url('./fonts/geist-v4-latin-regular.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Geist';
+  font-style: normal;
+  font-weight: 500;
+  src: url('./fonts/geist-v4-latin-500.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Geist';
+  font-style: normal;
+  font-weight: 600;
+  src: url('./fonts/geist-v4-latin-600.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Geist';
+  font-style: normal;
+  font-weight: 700;
+  src: url('./fonts/geist-v4-latin-700.woff2') format('woff2');
+}
 :root {
   /* ============================================
      1. PALETA DE COLORES (Light Mode)

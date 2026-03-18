@@ -163,6 +163,13 @@ function posicionarDropdownExport() {
         // Mostrar ya en su posición final, sin parpadeo
         dropdown.style.visibility = 'visible';
     });
+    // Cerrar el dropdown al pulsar cualquier opción
+dropdown.querySelectorAll('a, button').forEach(item => {
+    item.addEventListener('click', () => {
+        details.open = false;
+    });
+});
+
 }
 
 // ===============================================
@@ -1514,9 +1521,9 @@ function buildReportHTML() {
 
     // ── Datos paciente ────────────────────────────────
     html += `
-    <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:14px;border-collapse:collapse;">
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:14px;border-collapse:collapse;border:1px solid #e2e8f0;background:#f8fafc;">
       <tr>
-        <td style="background:#f1f5f9;border-left:4px solid #0891b2;padding:10px 14px;">
+        <td style="padding:10px 14px;">
           <div style="font-size:10px;font-weight:bold;color:#0891b2;font-family:Arial,sans-serif;margin-bottom:5px;letter-spacing:0.5px;">DATOS DEL PACIENTE</div>
           <div style="font-size:12px;color:#1e293b;font-family:Arial,sans-serif;margin-bottom:3px;">
             <b>F. Nacimiento:</b> ${get('fecha_nacimiento')} &nbsp;&nbsp;
@@ -1978,8 +1985,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (isIOS()) {
             Swal.fire({
                 title: 'Instalar en iPhone',
-                html: '<div style="font-size: 15px; text-align: left; line-height: 1.6;">Para añadir esta calculadora a tu móvil:<br><br><b>1.</b> Toca el botón <b>Compartir</b> <i class="fas fa-arrow-up-from-square" style="font-size: 18px; color: #0891b2;"></i> en la barra inferior de Safari.<br><b>2.</b> Selecciona <b>"Añadir a la pantalla de inicio"</b> <i class="fas fa-plus-square" style="font-size: 18px; color: #0891b2;"></i>.</div>',                confirmButtonText: 'Entendido',
-                confirmButtonColor: '#0891b2',
+                html: '<div style="font-size: 15px; text-align: left; line-height: 1.6;">Para añadir esta calculadora a tu móvil:<br><br><b>1.</b> Toca el botón <b>Compartir</b> <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0891b2" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: text-bottom; margin: 0 2px;"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path><polyline points="16 6 12 2 8 6"></polyline><line x1="12" y1="2" x2="12" y2="15"></line></svg> en la barra inferior de Safari.<br><b>2.</b> Selecciona <b>"Añadir a la pantalla de inicio"</b> <i class="fas fa-plus-square" style="font-size: 18px; color: #0891b2; vertical-align: text-bottom; margin: 0 2px;"></i>.</div>',                confirmButtonColor: '#0891b2',
                 background: document.documentElement.getAttribute('data-color-scheme') === 'dark' ? '#1e293b' : '#fff',
                 color: document.documentElement.getAttribute('data-color-scheme') === 'dark' ? '#f1f5f9' : '#0f172a'
             });
